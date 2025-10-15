@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: uball-app
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_URL=${APP_URL}
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      - db
+    networks:
+      - uball-network
+
+  db:
+    image: mysql:8.0
+    container_name: uball-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+    networks:
+      - uball-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: uball-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
+    depends_on:
+      - app
+    networks:
+      - uball-network
+
+  redis:
+    image: redis:alpine
+    container_name: uball-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - uball-network
+
+  # Storage Setup Service - Production
+  storage-setup:
+    image: alpine:latest
+    container_name: uball-storage-setup-prod
+    volumes:
+      - ./:/app
+    working_dir: /app
+    command: >
+      sh -c "
+        echo '🚀 UBall Production Storage Setup Starting...' &&
+        mkdir -p storage/app/public/clips/thumbnails &&
+        mkdir -p storage/app/public/clips/processed &&
+        mkdir -p storage/app/public/images/profiles &&
+        mkdir -p storage/app/public/images/covers &&
+        mkdir -p storage/app/public/images/thumbnails &&
+        mkdir -p storage/app/public/temp &&
+        mkdir -p storage/app/private/clips &&
+        mkdir -p storage/app/private/backups &&
+        chmod -R 775 storage/ &&
+        chmod -R 775 bootstrap/cache/ &&
+        touch storage/app/public/clips/.gitkeep &&
+        touch storage/app/public/clips/thumbnails/.gitkeep &&
+        touch storage/app/public/clips/processed/.gitkeep &&
+        touch storage/app/public/images/.gitkeep &&
+        touch storage/app/public/images/profiles/.gitkeep &&
+        touch storage/app/public/images/covers/.gitkeep &&
+        touch storage/app/public/images/thumbnails/.gitkeep &&
+        touch storage/app/public/temp/.gitkeep &&
+        touch storage/app/private/clips/.gitkeep &&
+        touch storage/app/private/backups/.gitkeep &&
+        echo '✅ Production storage directories created!' &&
+        echo '📁 Clips: storage/app/public/clips/ (500MB limit)' &&
+        echo '📁 Images: storage/app/public/images/ (5MB limit)' &&
+        echo '🎉 Production storage setup completed!'
+      "
+    profiles:
+      - setup
+
+networks:
+  uball-network:
+    driver: bridge
+
+volumes:
+  dbdata:
+    driver: local

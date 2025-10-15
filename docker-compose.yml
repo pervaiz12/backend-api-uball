@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: uball-app-dev
+    restart: unless-stopped
+    volumes:
+      - .:/var/www/html
+      - ./storage:/var/www/html/storage
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - REDIS_HOST=redis
+    depends_on:
+      - db
+    networks:
+      - uball-network
+
+  db:
+    image: mysql:8.0
+    container_name: uball-db-dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-uball}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password}
+      MYSQL_USER: ${DB_USERNAME:-uball_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-uball_password}
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'no'
+    volumes:
+      - dbdata:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - uball-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: uball-nginx-dev
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "8000:80"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
+    depends_on:
+      - app
+    networks:
+      - uball-network
+
+  redis:
+    image: redis:alpine
+    container_name: uball-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - uball-network
+
+  # Storage Setup Service - One command setup for all folders
+  storage-setup:
+    image: alpine:latest
+    container_name: uball-storage-setup
+    volumes:
+      - ./:/app
+    working_dir: /app
+    command: >
+      sh -c "
+        echo '🚀 UBall Storage Setup Starting...' &&
+        mkdir -p storage/app/public/clips/thumbnails &&
+        mkdir -p storage/app/public/clips/processed &&
+        mkdir -p storage/app/public/images/profiles &&
+        mkdir -p storage/app/public/images/covers &&
+        mkdir -p storage/app/public/images/thumbnails &&
+        mkdir -p storage/app/public/temp &&
+        mkdir -p storage/app/private/clips &&
+        mkdir -p storage/app/private/backups &&
+        chmod -R 775 storage/ &&
+        chmod -R 775 bootstrap/cache/ &&
+        touch storage/app/public/clips/.gitkeep &&
+        touch storage/app/public/clips/thumbnails/.gitkeep &&
+        touch storage/app/public/clips/processed/.gitkeep &&
+        touch storage/app/public/images/.gitkeep &&
+        touch storage/app/public/images/profiles/.gitkeep &&
+        touch storage/app/public/images/covers/.gitkeep &&
+        touch storage/app/public/images/thumbnails/.gitkeep &&
+        touch storage/app/public/temp/.gitkeep &&
+        touch storage/app/private/clips/.gitkeep &&
+        touch storage/app/private/backups/.gitkeep &&
+        echo '✅ All storage directories created!' &&
+        echo '📁 Clips folder: storage/app/public/clips/' &&
+        echo '📁 Images folder: storage/app/public/images/' &&
+        echo '🎉 Storage setup completed successfully!'
+      "
+    profiles:
+      - setup
+
+networks:
+  uball-network:
+    driver: bridge
+
+volumes:
+  dbdata:
+    driver: local
