@@ -9,6 +9,23 @@ class MessageResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $iso = function ($value) {
+            if (!$value) {
+                return null;
+            }
+            // If it's already a Carbon instance
+            if ($value instanceof \Illuminate\Support\Carbon) {
+                return $value->toISOString();
+            }
+            // Try to parse strings or other date-like inputs
+            try {
+                return \Illuminate\Support\Carbon::parse($value)->toISOString();
+            } catch (\Throwable $e) {
+                // Fallback to raw string if parsing fails
+                return (string) $value;
+            }
+        };
+
         return [
             'id' => $this->id,
             'sender_id' => $this->sender_id,
@@ -36,9 +53,9 @@ class MessageResource extends JsonResource
                 // Default: public disk relative path like 'messages/filename.ext'
                 return url(\Illuminate\Support\Facades\Storage::url($path));
             })(),
-            'read_at' => $this->read_at ? $this->read_at->toISOString() : null,
-            'created_at' => $this->created_at ? $this->created_at->toISOString() : null,
-            'updated_at' => $this->updated_at ? $this->updated_at->toISOString() : null,
+            'read_at' => $iso($this->read_at),
+            'created_at' => $iso($this->created_at),
+            'updated_at' => $iso($this->updated_at),
         ];
     }
 }

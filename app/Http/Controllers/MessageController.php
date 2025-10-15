@@ -102,4 +102,16 @@ class MessageController extends Controller
             $message->load(['receiver:id,name,profile_photo', 'sender:id,name,profile_photo'])
         ))->response()->setStatusCode(201);
     }
+
+    public function markConversationRead(int $userId)
+    {
+        $auth = Auth::user();
+        // Mark all unread messages sent by $userId to the current user as read
+        \App\Models\Message::where('sender_id', $userId)
+            ->where('receiver_id', $auth->id)
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        return response()->json(['message' => 'Conversation marked as read']);
+    }
 }

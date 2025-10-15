@@ -76,6 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('messages', [MessageController::class, 'index']);
     Route::get('messages/conversation/{userId}', [MessageController::class, 'conversation']);
     Route::post('messages', [MessageController::class, 'send']);
+    Route::patch('messages/conversation/{userId}/read', [MessageController::class, 'markConversationRead']);
 });
 
 // Admin
