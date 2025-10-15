@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Resources\MessageResource;
+use App\Notifications\MessageReceived;
 
 class MessageController extends Controller
 {
@@ -68,6 +69,12 @@ class MessageController extends Controller
             'receiver_id' => (int) $validated['receiver_id'],
             'body' => $validated['body'],
         ]);
+
+        // Notify the receiver
+        $receiver = User::find($validated['receiver_id']);
+        if ($receiver) {
+            $receiver->notify(new MessageReceived($message));
+        }
 
         return (new MessageResource(
             $message->load(['receiver:id,name,profile_photo', 'sender:id,name,profile_photo'])
