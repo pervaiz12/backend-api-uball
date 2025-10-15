@@ -59,16 +59,38 @@ class MessageController extends Controller
                 // Prevent sending a message to self
                 'not_in:' . $auth->id,
             ],
-            'body' => ['required', 'string', 'max:2000'],
+            'body' => ['nullable', 'string', 'max:2000'],
+            'attachment' => ['nullable', 'file', 'max:10240', 'mimes:jpg,jpeg,png,webp,gif,pdf,doc,docx,xls,xlsx,txt'],
         ], [
             'receiver_id.not_in' => 'You cannot send a message to yourself.',
         ]);
 
-        $message = Message::create([
+        // Ensure at least one of body or attachment is provided
+        $bodyInput = (string) $request->input('body', '');
+        if ((trim($bodyInput) === '') && !$request->hasFile('attachment')) {
+            return response()->json([
+                'message' => 'Message body or an attachment is required.'
+            ], 422);
+        }
+
+        $data = [
             'sender_id' => $auth->id,
             'receiver_id' => (int) $validated['receiver_id'],
-            'body' => $validated['body'],
-        ]);
+            'body' => $bodyInput,
+        ];
+
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            // Store on the public disk to ensure it's served via /storage
+            $storedRelativePath = \Illuminate\Support\Facades\Storage::disk('public')->putFile('messages', $file, 'public');
+            // This returns e.g. 'messages/filename.ext'
+            $data['attachment_path'] = $storedRelativePath;
+            $data['attachment_type'] = $file->getMimeType();
+            $data['attachment_name'] = $file->getClientOriginalName();
+            $data['attachment_size'] = $file->getSize();
+        }
+
+        $message = Message::create($data);
 
         // Notify the receiver
         $receiver = User::find($validated['receiver_id']);

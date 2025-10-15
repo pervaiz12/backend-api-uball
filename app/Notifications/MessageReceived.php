@@ -25,6 +25,18 @@ class MessageReceived extends Notification
 
     public function toArray(object $notifiable): array
     {
+        $path = $this->message->attachment_path;
+        $attachmentUrl = null;
+        if ($path) {
+            if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+                $attachmentUrl = $path;
+            } elseif (str_starts_with($path, 'storage/')) {
+                $attachmentUrl = url($path);
+            } else {
+                $attachmentUrl = url(\Illuminate\Support\Facades\Storage::url($path));
+            }
+        }
+
         return [
             'type' => 'message_received',
             'message_id' => $this->message->id,
@@ -35,6 +47,10 @@ class MessageReceived extends Notification
             ],
             'receiver_id' => $this->message->receiver_id,
             'body' => $this->message->body,
+            'attachment_url' => $attachmentUrl,
+            'attachment_type' => $this->message->attachment_type,
+            'attachment_name' => $this->message->attachment_name,
+            'attachment_size' => $this->message->attachment_size,
             'created_at' => $this->message->created_at?->toISOString(),
         ];
     }
