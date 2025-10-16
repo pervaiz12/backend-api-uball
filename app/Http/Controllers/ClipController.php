@@ -77,16 +77,62 @@ class ClipController extends Controller
 
         $path = $request->file('video')->store('clips', 'public');
 
+        // Handle thumbnail upload or auto-generate from video
+        $thumbnailUrl = null;
+        if ($request->hasFile('thumbnail')) {
+            // User uploaded custom thumbnail
+            $thumbnailPath = $request->file('thumbnail')->store('thumbnails', 'public');
+            $thumbnailUrl = Storage::disk('public')->url($thumbnailPath);
+        } else {
+            // Auto-generate thumbnail from video
+            $thumbnailUrl = $this->generateVideoThumbnail($path);
+        }
+
+        // Calculate percentages if stats are provided
+        $fgPercentage = null;
+        $threePtPercentage = null;
+        if ($request->filled(['fg_made', 'fg_attempts'])) {
+            $fgMade = (int) $request->input('fg_made');
+            $fgAttempts = (int) $request->input('fg_attempts');
+            if ($fgAttempts > 0) {
+                $fgPercentage = ($fgMade / $fgAttempts) * 100;
+            }
+        }
+        if ($request->filled(['three_made', 'three_attempts'])) {
+            $threeMade = (int) $request->input('three_made');
+            $threeAttempts = (int) $request->input('three_attempts');
+            if ($threeAttempts > 0) {
+                $threePtPercentage = ($threeMade / $threeAttempts) * 100;
+            }
+        }
+
         $data = [
             'user_id' => Auth::id(),
-            'game_id' => $validated['game_id'],
+            'game_id' => $request->input('gameId') ?: $request->input('game_id'),
             'video_url' => Storage::disk('public')->url($path),
-            'description' => $validated['description'] ?? null,
+            'external_video_url' => $request->input('videoUrl') ?: null,
+            'thumbnail_url' => $thumbnailUrl,
+            'title' => $request->input('title') ?: null,
+            'description' => $request->input('description') ?: null,
+            'tags' => $request->input('tags') ? json_decode($request->input('tags'), true) : [],
+            'team_name' => $request->input('teamName') ?: null,
+            'opponent_team' => $request->input('opponentTeam') ?: null,
+            'game_result' => $request->input('gameResult') ?: null,
+            'team_score' => $request->input('teamScore') ? (int) $request->input('teamScore') : null,
+            'opponent_score' => $request->input('opponentScore') ? (int) $request->input('opponentScore') : null,
+            'fg_percentage' => $fgPercentage,
+            'three_pt_percentage' => $threePtPercentage,
+            'four_pt_percentage' => 0.0, // Not implemented yet
+            'visibility' => $request->input('visibility', 'public'),
+            'show_in_trending' => $request->boolean('showInTrending'),
+            'show_in_profile' => $request->boolean('showInProfile', true),
+            'feature_on_dashboard' => $request->boolean('featureOnDashboard'),
+            'season' => $request->input('season', '2024'),
             // Auto-approve if uploader is admin; otherwise pending
             'status' => Gate::allows('is-admin') ? 'approved' : 'pending',
         ];
         if (Schema::hasColumn('clips', 'player_id')) {
-            $data['player_id'] = $request->input('player_id') ?: null;
+            $data['player_id'] = $request->input('playerId') ?: $request->input('player_id') ?: null;
         }
         if (Schema::hasColumn('clips', 'duration')) {
             $data['duration'] = $request->input('duration') ? (int) $request->input('duration') : null;
@@ -95,10 +141,10 @@ class ClipController extends Controller
         $clip->load(['user:id,name,profile_photo', 'game:id,location,game_date', 'player:id,name,profile_photo']);
 
         // If a player is selected, create a PlayerStat entry (use zero defaults when stat fields are not provided)
-        if ($request->filled('player_id')) {
+        if ($request->filled('playerId') || $request->filled('player_id')) {
             PlayerStat::create([
-                'game_id' => $validated['game_id'],
-                'user_id' => (int) $request->input('player_id'),
+                'game_id' => $request->input('gameId') ?: $request->input('game_id'),
+                'user_id' => (int) ($request->input('playerId') ?: $request->input('player_id')),
                 'points' => (int) ($request->input('points') ?? 0),
                 'rebounds' => (int) ($request->input('rebounds') ?? 0),
                 'assists' => (int) ($request->input('assists') ?? 0),
@@ -146,6 +192,196 @@ class ClipController extends Controller
         }
         $clip->load(['user:id,name,profile_photo', 'game:id,location,game_date', 'player:id,name,profile_photo']);
         return new ClipResource($clip);
+    }
+
+    /**
+     * Generate thumbnail from video file
+     */
+    private function generateVideoThumbnail(string $videoPath): ?string
+    {
+        try {
+            // Get the full path to the video file
+            $fullVideoPath = Storage::disk('public')->path($videoPath);
+            
+            // Check if video file exists
+            if (!file_exists($fullVideoPath)) {
+                \Log::warning("Video file not found for thumbnail generation: {$fullVideoPath}");
+                return null;
+            }
+
+            // Generate unique thumbnail filename
+            $thumbnailName = 'thumb_' . time() . '_' . uniqid() . '.jpg';
+            $thumbnailPath = 'thumbnails/' . $thumbnailName;
+            $fullThumbnailPath = Storage::disk('public')->path($thumbnailPath);
+
+            // Ensure thumbnails directory exists
+            $thumbnailDir = dirname($fullThumbnailPath);
+            if (!is_dir($thumbnailDir)) {
+                mkdir($thumbnailDir, 0755, true);
+            }
+
+            // Try different methods for thumbnail generation
+            $success = false;
+
+            // Method 1: Try FFmpeg if available
+            if ($this->isFFmpegAvailable()) {
+                $success = $this->generateThumbnailWithFFmpeg($fullVideoPath, $fullThumbnailPath);
+            }
+
+            // Method 2: Try PHP-FFMpeg if available
+            if (!$success && class_exists('\FFMpeg\FFMpeg')) {
+                $success = $this->generateThumbnailWithPHPFFmpeg($fullVideoPath, $fullThumbnailPath);
+            }
+
+            // Method 3: Fallback to ImageMagick if available
+            if (!$success && extension_loaded('imagick')) {
+                $success = $this->generateThumbnailWithImageMagick($fullVideoPath, $fullThumbnailPath);
+            }
+
+            // Method 4: Create a simple placeholder thumbnail if all else fails
+            if (!$success) {
+                $success = $this->generatePlaceholderThumbnail($fullThumbnailPath);
+            }
+
+            if ($success && file_exists($fullThumbnailPath)) {
+                return Storage::disk('public')->url($thumbnailPath);
+            }
+
+            \Log::warning("Failed to generate thumbnail for video: {$videoPath}");
+            return null;
+
+        } catch (\Exception $e) {
+            \Log::error("Error generating video thumbnail: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Check if FFmpeg is available
+     */
+    private function isFFmpegAvailable(): bool
+    {
+        $output = [];
+        $returnVar = 0;
+        exec('ffmpeg -version 2>&1', $output, $returnVar);
+        return $returnVar === 0;
+    }
+
+    /**
+     * Generate thumbnail using FFmpeg command line
+     */
+    private function generateThumbnailWithFFmpeg(string $videoPath, string $thumbnailPath): bool
+    {
+        try {
+            // Extract frame at 2 seconds (or 10% of video duration)
+            $command = sprintf(
+                'ffmpeg -i %s -ss 00:00:02 -vframes 1 -vf "scale=320:240:force_original_aspect_ratio=decrease,pad=320:240:(ow-iw)/2:(oh-ih)/2" -y %s 2>&1',
+                escapeshellarg($videoPath),
+                escapeshellarg($thumbnailPath)
+            );
+
+            $output = [];
+            $returnVar = 0;
+            exec($command, $output, $returnVar);
+
+            return $returnVar === 0 && file_exists($thumbnailPath);
+        } catch (\Exception $e) {
+            \Log::error("FFmpeg thumbnail generation failed: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Generate thumbnail using PHP-FFMpeg library
+     */
+    private function generateThumbnailWithPHPFFmpeg(string $videoPath, string $thumbnailPath): bool
+    {
+        try {
+            $ffmpeg = \FFMpeg\FFMpeg::create();
+            $video = $ffmpeg->open($videoPath);
+            
+            // Extract frame at 2 seconds
+            $frame = $video->frame(\FFMpeg\Coordinate\TimeCode::fromSeconds(2));
+            $frame->save($thumbnailPath);
+
+            return file_exists($thumbnailPath);
+        } catch (\Exception $e) {
+            \Log::error("PHP-FFMpeg thumbnail generation failed: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Generate thumbnail using ImageMagick (limited video support)
+     */
+    private function generateThumbnailWithImageMagick(string $videoPath, string $thumbnailPath): bool
+    {
+        try {
+            $imagick = new \Imagick();
+            $imagick->readImage($videoPath . '[2]'); // Read frame at 2 seconds
+            $imagick->setImageFormat('jpeg');
+            $imagick->thumbnailImage(320, 240, true, true);
+            $imagick->writeImage($thumbnailPath);
+            $imagick->clear();
+
+            return file_exists($thumbnailPath);
+        } catch (\Exception $e) {
+            \Log::error("ImageMagick thumbnail generation failed: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Generate a placeholder thumbnail when video processing fails
+     */
+    private function generatePlaceholderThumbnail(string $thumbnailPath): bool
+    {
+        try {
+            // Create a simple 320x240 placeholder image
+            $image = imagecreate(320, 240);
+            
+            // Set colors
+            $backgroundColor = imagecolorallocate($image, 30, 30, 30); // Dark gray
+            $textColor = imagecolorallocate($image, 255, 255, 255); // White
+            $accentColor = imagecolorallocate($image, 225, 6, 0); // UBall red
+            
+            // Fill background
+            imagefill($image, 0, 0, $backgroundColor);
+            
+            // Add basketball-themed design
+            // Draw a simple basketball court outline
+            imagerectangle($image, 20, 40, 300, 200, $accentColor);
+            imagerectangle($image, 140, 40, 180, 80, $accentColor);
+            imagerectangle($image, 140, 160, 180, 200, $accentColor);
+            
+            // Add center circle
+            imageellipse($image, 160, 120, 60, 60, $accentColor);
+            
+            // Add play icon (triangle)
+            $triangle = [
+                140, 100,  // Top point
+                140, 140,  // Bottom left
+                170, 120   // Right point
+            ];
+            imagefilledpolygon($image, $triangle, 3, $textColor);
+            
+            // Add text
+            $font = 3; // Built-in font
+            $text = "VIDEO THUMBNAIL";
+            $textWidth = imagefontwidth($font) * strlen($text);
+            $x = (320 - $textWidth) / 2;
+            imagestring($image, $font, $x, 210, $text, $textColor);
+            
+            // Save as JPEG
+            $success = imagejpeg($image, $thumbnailPath, 85);
+            imagedestroy($image);
+            
+            return $success && file_exists($thumbnailPath);
+            
+        } catch (\Exception $e) {
+            \Log::error("Placeholder thumbnail generation failed: " . $e->getMessage());
+            return false;
+        }
     }
 
     public function destroy(Clip $clip)
