@@ -21,6 +21,9 @@ Route::get('/health', fn() => response()->json(['status' => 'ok']));
 Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']); // Admin/Staff login
 Route::post('player-login', [AuthController::class, 'playerLogin']); // Player login
+Route::post('auth/google', [AuthController::class, 'googleAuth']); // Google OAuth
+Route::post('auth/facebook', [AuthController::class, 'facebookAuth']); // Facebook OAuth
+Route::post('auth/apple', [AuthController::class, 'appleAuth']); // Apple OAuth
 Route::middleware('auth:sanctum')->post('logout', [AuthController::class, 'logout']);
 
 // Protected example route (current user)

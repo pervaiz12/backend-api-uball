@@ -114,4 +114,151 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'Logged out']);
     }
+
+    /**
+     * Handle Google OAuth login/signup
+     */
+    public function googleAuth(Request $request)
+    {
+        $validated = $request->validate([
+            'token' => ['required', 'string'],
+            'email' => ['required', 'email'],
+            'name' => ['required', 'string'],
+            'google_id' => ['required', 'string'],
+            'profile_photo' => ['nullable', 'string'],
+        ]);
+
+        // Check if user exists with this email
+        $user = User::where('email', $validated['email'])->first();
+
+        if ($user) {
+            // User exists, update google_id if not set
+            if (!$user->google_id) {
+                $user->google_id = $validated['google_id'];
+                $user->save();
+            }
+        } else {
+            // Create new user
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'google_id' => $validated['google_id'],
+                'profile_photo' => $validated['profile_photo'] ?? null,
+                'role' => 'player',
+                'is_official' => false,
+                'password' => Hash::make(uniqid()), // Random password for social login users
+            ]);
+        }
+
+        // Update last login
+        $user->last_login = now();
+        $user->save();
+
+        // Create token
+        $token = $user->createToken('api')->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user' => new UserResource($user),
+            'message' => 'Google authentication successful',
+        ]);
+    }
+
+    /**
+     * Handle Facebook OAuth login/signup
+     */
+    public function facebookAuth(Request $request)
+    {
+        $validated = $request->validate([
+            'token' => ['required', 'string'],
+            'email' => ['required', 'email'],
+            'name' => ['required', 'string'],
+            'facebook_id' => ['required', 'string'],
+            'profile_photo' => ['nullable', 'string'],
+        ]);
+
+        // Check if user exists with this email
+        $user = User::where('email', $validated['email'])->first();
+
+        if ($user) {
+            // User exists, update facebook_id if not set
+            if (!$user->facebook_id) {
+                $user->facebook_id = $validated['facebook_id'];
+                $user->save();
+            }
+        } else {
+            // Create new user
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'facebook_id' => $validated['facebook_id'],
+                'profile_photo' => $validated['profile_photo'] ?? null,
+                'role' => 'player',
+                'is_official' => false,
+                'password' => Hash::make(uniqid()), // Random password for social login users
+            ]);
+        }
+
+        // Update last login
+        $user->last_login = now();
+        $user->save();
+
+        // Create token
+        $token = $user->createToken('api')->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user' => new UserResource($user),
+            'message' => 'Facebook authentication successful',
+        ]);
+    }
+
+    /**
+     * Handle Apple OAuth login/signup
+     */
+    public function appleAuth(Request $request)
+    {
+        $validated = $request->validate([
+            'token' => ['required', 'string'],
+            'email' => ['required', 'email'],
+            'name' => ['required', 'string'],
+            'apple_id' => ['required', 'string'],
+            'profile_photo' => ['nullable', 'string'],
+        ]);
+
+        // Check if user exists with this email
+        $user = User::where('email', $validated['email'])->first();
+
+        if ($user) {
+            // User exists, update apple_id if not set
+            if (!$user->apple_id) {
+                $user->apple_id = $validated['apple_id'];
+                $user->save();
+            }
+        } else {
+            // Create new user
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'apple_id' => $validated['apple_id'],
+                'profile_photo' => $validated['profile_photo'] ?? null,
+                'role' => 'player',
+                'is_official' => false,
+                'password' => Hash::make(uniqid()), // Random password for social login users
+            ]);
+        }
+
+        // Update last login
+        $user->last_login = now();
+        $user->save();
+
+        // Create token
+        $token = $user->createToken('api')->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user' => new UserResource($user),
+            'message' => 'Apple authentication successful',
+        ]);
+    }
 }

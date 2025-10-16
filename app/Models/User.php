@@ -28,6 +28,9 @@ class User extends Authenticatable
         'role',
         'is_official',
         'official_request',
+        'google_id',
+        'facebook_id',
+        'apple_id',
     ];
 
     /**
