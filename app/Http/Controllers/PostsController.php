@@ -5,13 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Post;
 use App\Models\PostLike;
 use App\Models\PostComment;
+use App\Models\Clip;
+use App\Models\Like;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class PostsController extends Controller
 {
     /**
-     * Get paginated posts for the feed
+     * Get paginated posts for the feed (using clips data)
      */
     public function index(Request $request): JsonResponse
     {
@@ -19,28 +21,40 @@ class PostsController extends Controller
         $perPage = $perPage > 0 ? min($perPage, 50) : 10;
         $currentUserId = auth()->id();
 
-        $posts = Post::with(['user:id,name,profile_photo,role,is_official,city'])
-            ->withCount(['likes', 'comments'])
-            ->recent()
+        // Fetch clips instead of posts, only approved clips
+        $clips = Clip::with(['user:id,name,profile_photo,role,is_official,city', 'player:id,name,profile_photo,role,is_official', 'game:id,location,game_date'])
+            ->where('status', 'approved')
+            ->orderByDesc('created_at')
             ->paginate($perPage);
 
-        // Add is_liked_by_user flag for each post
-        $posts->getCollection()->transform(function ($post) use ($currentUserId) {
-            $post->is_liked_by_user = $post->isLikedBy($currentUserId);
-            // Update counts from relationships
-            $post->likes_count = $post->likes_count;
-            $post->comments_count = $post->comments_count;
-            return $post;
+        // Transform clips to match post structure and add is_liked_by_user flag
+        $clips->getCollection()->transform(function ($clip) use ($currentUserId) {
+            // Check if current user liked this clip
+            $isLiked = Like::where('user_id', $currentUserId)
+                ->where('clip_id', $clip->id)
+                ->exists();
+            
+            $clip->is_liked_by_user = $isLiked;
+            
+            // Map clip fields to post-like structure for frontend compatibility
+            $clip->content = $clip->description;
+            $clip->media_url = $clip->video_url;
+            $clip->media_type = 'video';
+            
+            // Keep both user and player - frontend will use player if available
+            // No need to replace, just ensure both are loaded
+            
+            return $clip;
         });
 
         return response()->json([
-            'data' => $posts->items(),
+            'data' => $clips->items(),
             'pagination' => [
-                'current_page' => $posts->currentPage(),
-                'last_page' => $posts->lastPage(),
-                'per_page' => $posts->perPage(),
-                'total' => $posts->total(),
-                'has_more' => $posts->hasMorePages(),
+                'current_page' => $clips->currentPage(),
+                'last_page' => $clips->lastPage(),
+                'per_page' => $clips->perPage(),
+                'total' => $clips->total(),
+                'has_more' => $clips->hasMorePages(),
             ]
         ]);
     }
@@ -79,71 +93,80 @@ class PostsController extends Controller
     }
 
     /**
-     * Like/unlike a post (toggle)
+     * Like/unlike a post (toggle) - now works with clips
      */
-    public function toggleLike(Post $post): JsonResponse
+    public function toggleLike($id): JsonResponse
     {
         $userId = auth()->id();
         
-        // Check if user already liked this post
-        $existingLike = PostLike::where('user_id', $userId)
-            ->where('post_id', $post->id)
+        // Find the clip
+        $clip = Clip::findOrFail($id);
+        
+        // Check if user already liked this clip
+        $existingLike = Like::where('user_id', $userId)
+            ->where('clip_id', $clip->id)
             ->first();
             
         if ($existingLike) {
             // Unlike: Remove the like
             $existingLike->delete();
-            $post->decrement('likes_count');
-            $message = 'Post unliked';
+            $clip->decrement('likes_count');
+            $message = 'Clip unliked';
             $isLiked = false;
         } else {
             // Like: Add the like
-            PostLike::create([
+            Like::create([
                 'user_id' => $userId,
-                'post_id' => $post->id,
+                'clip_id' => $clip->id,
             ]);
-            $post->increment('likes_count');
-            $message = 'Post liked';
+            $clip->increment('likes_count');
+            $message = 'Clip liked';
             $isLiked = true;
         }
         
         return response()->json([
             'message' => $message,
-            'likes_count' => $post->fresh()->likes_count,
+            'likes_count' => $clip->fresh()->likes_count,
             'is_liked' => $isLiked
         ]);
     }
 
     /**
-     * Get comments for a post
+     * Get comments for a post (now works with clips)
      */
-    public function getComments(Post $post): JsonResponse
+    public function getComments($id): JsonResponse
     {
-        $comments = PostComment::with(['user:id,name,profile_photo'])
-            ->where('post_id', $post->id)
-            ->recent()
+        // Find the clip
+        $clip = Clip::findOrFail($id);
+        
+        $comments = \App\Models\Comment::with(['user:id,name,profile_photo'])
+            ->where('clip_id', $clip->id)
+            ->orderByDesc('created_at')
             ->get();
             
         return response()->json($comments);
     }
 
     /**
-     * Add a comment to a post
+     * Add a comment to a post (now works with clips)
      */
-    public function addComment(Request $request, Post $post): JsonResponse
+    public function addComment(Request $request, $id): JsonResponse
     {
+        // Find the clip
+        $clip = Clip::findOrFail($id);
+        
         $validated = $request->validate([
             'content' => 'required|string|max:1000',
         ]);
 
-        $comment = PostComment::create([
+        $comment = \App\Models\Comment::create([
             'user_id' => auth()->id(),
-            'post_id' => $post->id,
-            'content' => $validated['content'],
+            'clip_id' => $clip->id,
+            'body' => $validated['content'],
         ]);
 
         // Increment comment count
-        $post->increment('comments_count');
+        $clip->increment('comments_count');
 
         // Load user relationship
         $comment->load(['user:id,name,profile_photo']);
@@ -152,10 +175,12 @@ class PostsController extends Controller
     }
 
     /**
-     * Update a comment
+     * Update a comment (now works with clip comments)
      */
-    public function updateComment(Request $request, PostComment $comment): JsonResponse
+    public function updateComment(Request $request, $commentId): JsonResponse
     {
+        $comment = \App\Models\Comment::findOrFail($commentId);
+        
         // Check if user owns the comment
         if ($comment->user_id !== auth()->id()) {
             return response()->json(['message' => 'Unauthorized'], 403);
@@ -172,10 +197,11 @@ class PostsController extends Controller
     }
 
     /**
-     * Delete a comment
+     * Delete a comment (now works with clip comments)
      */
-    public function deleteComment(PostComment $comment): JsonResponse
+    public function deleteComment($commentId): JsonResponse
     {
+        $comment = \App\Models\Comment::findOrFail($commentId);
         $currentUser = auth()->user();
         
         // Check if user owns the comment or is an admin
@@ -183,11 +209,13 @@ class PostsController extends Controller
             return response()->json(['message' => 'Unauthorized. You can only delete your own comments.'], 403);
         }
 
-        $post = $comment->post;
+        $clip = $comment->clip;
         $comment->delete();
         
         // Decrement comment count
-        $post->decrement('comments_count');
+        if ($clip) {
+            $clip->decrement('comments_count');
+        }
 
         return response()->json(['message' => 'Comment deleted successfully']);
     }

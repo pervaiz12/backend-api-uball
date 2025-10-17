@@ -26,7 +26,9 @@ class ClipController extends Controller
         $perPage = $perPage > 0 ? min($perPage, 50) : 15;
 
         $query = Clip::with(['user:id,name,profile_photo', 'game:id,location,game_date', 'player:id,name,profile_photo'])
+            ->where('status', 'approved') // Only show approved clips
             ->orderByDesc('id');
+            
         if ($status = request()->query('status')) {
             $query->where('status', $status);
         }
@@ -44,8 +46,35 @@ class ClipController extends Controller
                 });
             });
         }
+        // Filter by tag (for category filtering)
+        if ($tag = request()->query('tag')) {
+            $query->whereJsonContains('tags', $tag);
+        }
+        
         $clips = $query->paginate($perPage)->appends(request()->query());
         return ClipResource::collection($clips);
+    }
+
+    /**
+     * Get all unique tags from approved clips
+     */
+    public function getTags()
+    {
+        $clips = Clip::where('status', 'approved')
+            ->whereNotNull('tags')
+            ->get(['tags']);
+        
+        $allTags = [];
+        foreach ($clips as $clip) {
+            if (is_array($clip->tags)) {
+                $allTags = array_merge($allTags, $clip->tags);
+            }
+        }
+        
+        $uniqueTags = array_unique($allTags);
+        sort($uniqueTags);
+        
+        return response()->json(['tags' => array_values($uniqueTags)]);
     }
 
     public function upload(ClipUploadRequest $request)

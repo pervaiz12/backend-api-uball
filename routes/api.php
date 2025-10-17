@@ -13,17 +13,20 @@ use App\Http\Controllers\FeedController;
 use App\Http\Controllers\MetricsController;
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\UsersController;
+use App\Http\Controllers\ClipController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PostsController;
 
 // Health check
 Route::get('/health', fn() => response()->json(['status' => 'ok']));
 
 // Auth
 Route::post('register', [AuthController::class, 'register']);
-Route::post('login', [AuthController::class, 'login']); // Admin/Staff login
-Route::post('player-login', [AuthController::class, 'playerLogin']); // Player login
-Route::post('auth/google', [AuthController::class, 'googleAuth']); // Google OAuth
-Route::post('auth/facebook', [AuthController::class, 'facebookAuth']); // Facebook OAuth
-Route::post('auth/apple', [AuthController::class, 'appleAuth']); // Apple OAuth
+Route::post('login', [AuthController::class, 'login']);
+Route::post('player-login', [AuthController::class, 'playerLogin']);
+Route::post('auth/google', [AuthController::class, 'googleAuth']);
+Route::post('auth/facebook', [AuthController::class, 'facebookAuth']);
+Route::post('auth/apple', [AuthController::class, 'appleAuth']);
 Route::middleware('auth:sanctum')->post('logout', [AuthController::class, 'logout']);
 
 // Protected example route (current user)
@@ -42,7 +45,6 @@ Route::middleware('auth:sanctum')->group(function () {
 // Games
 Route::get('games', [GameController::class, 'index']);
 Route::get('games/{game}', [GameController::class, 'show']);
-// Public player games (for profile viewing)
 Route::get('players/{playerId}/games', [GameController::class, 'playerGames']);
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -52,9 +54,9 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // Clips
-use App\Http\Controllers\ClipController;
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('clips', [ClipController::class, 'index']);
+    Route::get('clips/tags', [ClipController::class, 'getTags']);
     Route::post('clips', [ClipController::class, 'upload']);
     Route::patch('clips/{clip}', [ClipController::class, 'update']);
     Route::delete('clips/{clip}', [ClipController::class, 'destroy']);
@@ -109,9 +111,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('clips/{clip}/comments', [FeedController::class, 'comments']);
     Route::delete('comments/{comment}', [FeedController::class, 'destroyComment']);
 });
-use App\Http\Controllers\NotificationController;
-use App\Http\Controllers\PostsController;
 
+// Notifications
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('me/notifications', [NotificationController::class, 'index']);
     Route::get('me/notifications/unread', [NotificationController::class, 'unread']);
@@ -119,7 +120,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('me/notifications/read-all', [NotificationController::class, 'markAllRead']);
 });
 
-// Recent Activity (dashboard widget)
+// Recent Activity
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('activity', [ActivityController::class, 'index']);
 });
@@ -138,22 +139,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('comments/{comment}', [PostsController::class, 'deleteComment']);
 });
 
-
+// Public Players directory
 Route::middleware('auth:sanctum')->group(function () {
-});
-
-// Public Players directory (authenticated)
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('players', [UsersController::class, 'publicPlayers']); // Use publicPlayers instead of index
-    // Top official players
+    Route::get('players', [UsersController::class, 'publicPlayers']);
     Route::get('/players/top-officials', [UsersController::class, 'topOfficialPlayers']);
-    
-    // Suggested players and following
     Route::get('/players/suggested', [UsersController::class, 'suggestedPlayers']);
     Route::post('/players/{playerId}/follow', [UsersController::class, 'followPlayer']);
     Route::delete('/players/{playerId}/follow', [UsersController::class, 'unfollowPlayer']);
     Route::get('players/{user}', [UsersController::class, 'showPublic']);
-    Route::post('players', [UsersController::class, 'storePlayer']); // This requires 'is-staff'
+    Route::post('players', [UsersController::class, 'storePlayer']);
     Route::put('players/{user}', [UsersController::class, 'updatePlayer']);
     Route::delete('players/{user}', [UsersController::class, 'destroyPlayer']);
 });

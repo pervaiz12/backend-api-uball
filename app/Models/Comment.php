@@ -16,6 +16,8 @@ class Comment extends Model
         'body',
     ];
 
+    protected $appends = ['content'];
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -24,5 +26,11 @@ class Comment extends Model
     public function clip()
     {
         return $this->belongsTo(Clip::class);
+    }
+
+    // Accessor to return 'body' as 'content' for API consistency
+    public function getContentAttribute()
+    {
+        return $this->body;
     }
 }

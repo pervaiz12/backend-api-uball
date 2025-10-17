@@ -215,6 +215,16 @@ class UsersController extends Controller
             'games'
         ]);
         
+        // Check if current user is following this player
+        $currentUserId = auth()->id();
+        $isFollowing = false;
+        if ($currentUserId) {
+            $isFollowing = DB::table('followers')
+                ->where('follower_id', $currentUserId)
+                ->where('following_id', $user->id)
+                ->exists();
+        }
+        
         // Compute games_count from distinct game_id in clips where this user is tagged as player
         $gamesCount = DB::table('clips')
             ->where('player_id', $user->id)
@@ -237,6 +247,7 @@ class UsersController extends Controller
         $user->setAttribute('overall_rating', $ratings['overall']);
         $user->setAttribute('offense_rating', $ratings['offense']);
         $user->setAttribute('defense_rating', $ratings['defense']);
+        $user->setAttribute('is_following', $isFollowing);
         
         return new UserResource($user);
     }

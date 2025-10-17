@@ -114,4 +114,4 @@ echo "1. Check browser console for API errors\n";
 echo "2. Verify frontend is calling correct endpoint\n";
 echo "3. Check if clips are approved and have player_id set\n";
 echo "4. Ensure games exist and are properly linked\n";
-echo "5. Test API directly: curl http://localhost:8001/api/players/{$playerId}/games\n";
+echo "5. Test API directly: curl http://localhost:8000/api/players/{$playerId}/games\n";

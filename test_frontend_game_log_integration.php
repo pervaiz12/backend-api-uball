@@ -89,7 +89,7 @@ echo "🌐 TESTING FRONTEND API CALL:\n";
 echo "=============================\n";
 
 // Simulate the exact HTTP request
-$apiUrl = "http://127.0.0.1:8001/api/players/{$playerId}/games";
+$apiUrl = "http://127.0.0.1:8000/api/players/{$playerId}/games";
 echo "📡 API URL: {$apiUrl}\n";
 
 // Test with curl

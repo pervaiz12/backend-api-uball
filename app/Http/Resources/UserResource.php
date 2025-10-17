@@ -23,6 +23,7 @@ class UserResource extends JsonResource
             'clips_count' => (int) ($this->clips_count ?? 0),
             'followers_count' => (int) ($this->followers_count ?? 0),
             'following_count' => (int) ($this->following_count ?? 0),
+            'is_following' => (bool) ($this->is_following ?? false),
             'last_login' => $this->last_login ? $this->last_login->toIso8601String() : null,
             'created_at' => $this->created_at ? $this->created_at->toIso8601String() : null,
             'updated_at' => $this->updated_at ? $this->updated_at->toIso8601String() : null,
