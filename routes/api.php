@@ -42,6 +42,9 @@ Route::middleware('auth:sanctum')->group(function () {
 // Games
 Route::get('games', [GameController::class, 'index']);
 Route::get('games/{game}', [GameController::class, 'show']);
+// Public player games (for profile viewing)
+Route::get('players/{playerId}/games', [GameController::class, 'playerGames']);
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('games', [GameController::class, 'store']);
     Route::put('games/{game}', [GameController::class, 'update']);
@@ -55,6 +58,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('clips', [ClipController::class, 'upload']);
     Route::patch('clips/{clip}', [ClipController::class, 'update']);
     Route::delete('clips/{clip}', [ClipController::class, 'destroy']);
+    Route::get('players/{playerId}/clips', [ClipController::class, 'playerClips']);
+    Route::get('players/{playerId}/highlights', [ClipController::class, 'playerHighlights']);
 });
 
 // Stats
@@ -63,6 +68,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('games/{game}/stats', [StatController::class, 'store']);
     Route::get('me/stats/last-10', [StatController::class, 'lastTen']);
     Route::get('me/stats/season', [StatController::class, 'season']);
+    Route::get('players/{playerId}/stats', [StatController::class, 'playerStats']);
     Route::delete('stats/{stat}', [StatController::class, 'destroy']);
 });
 

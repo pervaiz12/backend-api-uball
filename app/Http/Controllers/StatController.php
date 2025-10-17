@@ -63,6 +63,15 @@ class StatController extends Controller
         return $agg ?? [];
     }
 
+    public function playerStats($playerId)
+    {
+        $stats = PlayerStat::where('user_id', $playerId)
+            ->with(['user:id,name,profile_photo', 'game:id,location,game_date'])
+            ->orderByDesc('id')
+            ->get();
+        return PlayerStatResource::collection($stats);
+    }
+
     public function destroy(PlayerStat $stat)
     {
         // Staff or Admin can delete any stat line

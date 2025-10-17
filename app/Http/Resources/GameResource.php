@@ -14,6 +14,12 @@ class GameResource extends JsonResource
             'location' => $this->location,
             'game_date' => $this->game_date,
             'created_by' => $this->created_by,
+            'result' => $this->result ?? null,
+            'team_score' => $this->team_score ?? null,
+            'opponent_score' => $this->opponent_score ?? null,
+            'player_stats' => $this->player_stats ?? null,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
         ];
     }
 }

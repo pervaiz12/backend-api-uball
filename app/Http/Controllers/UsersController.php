@@ -205,15 +205,102 @@ class UsersController extends Controller
         if ($user->role !== 'player') {
             abort(404);
         }
+        
+        // Load all relationship counts
+        $user->loadCount([
+            'followers',
+            'following', 
+            'clips',
+            'taggedClips',
+            'games'
+        ]);
+        
         // Compute games_count from distinct game_id in clips where this user is tagged as player
         $gamesCount = DB::table('clips')
             ->where('player_id', $user->id)
             ->whereNotNull('game_id')
             ->distinct('game_id')
             ->count('game_id');
-        // Dynamically attach for the resource
-        $user->setAttribute('games_count', (int) $gamesCount);
+            
+        // Use the higher count between actual games created and games from clips
+        $totalGamesCount = max($user->games_count, $gamesCount);
+        
+        // Use tagged clips count for videos (clips where this player is featured)
+        $videosCount = $user->tagged_clips_count;
+        
+        // Calculate player ratings based on stats
+        $ratings = $this->calculatePlayerRatings($user->id);
+        
+        // Dynamically attach computed counts and ratings
+        $user->setAttribute('games_count', (int) $totalGamesCount);
+        $user->setAttribute('clips_count', (int) $videosCount);
+        $user->setAttribute('overall_rating', $ratings['overall']);
+        $user->setAttribute('offense_rating', $ratings['offense']);
+        $user->setAttribute('defense_rating', $ratings['defense']);
+        
         return new UserResource($user);
+    }
+
+    private function calculatePlayerRatings($userId)
+    {
+        $stats = \App\Models\PlayerStat::where('user_id', $userId)->get();
+        
+        if ($stats->isEmpty()) {
+            // Default ratings for players without stats
+            return [
+                'overall' => 75,
+                'offense' => 70,
+                'defense' => 65
+            ];
+        }
+
+        // Calculate totals
+        $totalGames = $stats->count();
+        $totalPoints = $stats->sum('points');
+        $totalAssists = $stats->sum('assists');
+        $totalRebounds = $stats->sum('rebounds');
+        $totalSteals = $stats->sum('steals');
+        $totalBlocks = $stats->sum('blocks');
+        $totalFgMade = $stats->sum('fg_made');
+        $totalFgAttempts = $stats->sum('fg_attempts');
+        $totalThreeMade = $stats->sum('three_made');
+        $totalThreeAttempts = $stats->sum('three_attempts');
+
+        // Calculate averages
+        $ppg = $totalPoints / $totalGames;
+        $apg = $totalAssists / $totalGames;
+        $rpg = $totalRebounds / $totalGames;
+        $spg = $totalSteals / $totalGames;
+        $bpg = $totalBlocks / $totalGames;
+        $fgPct = $totalFgAttempts > 0 ? ($totalFgMade / $totalFgAttempts) * 100 : 0;
+        $threePct = $totalThreeAttempts > 0 ? ($totalThreeMade / $totalThreeAttempts) * 100 : 0;
+
+        // Calculate offense rating (based on scoring and shooting)
+        $offenseRating = min(99, max(50, 
+            ($ppg * 2.5) + 
+            ($apg * 3) + 
+            ($fgPct * 0.8) + 
+            ($threePct * 0.5)
+        ));
+
+        // Calculate defense rating (based on defensive stats)
+        $defenseRating = min(99, max(50,
+            ($rpg * 4) + 
+            ($spg * 8) + 
+            ($bpg * 10) + 
+            50 // Base defensive rating
+        ));
+
+        // Calculate overall rating (weighted average)
+        $overallRating = min(99, max(50,
+            ($offenseRating * 0.6) + ($defenseRating * 0.4)
+        ));
+
+        return [
+            'overall' => round($overallRating),
+            'offense' => round($offenseRating),
+            'defense' => round($defenseRating)
+        ];
     }
 
     public function store(Request $request)

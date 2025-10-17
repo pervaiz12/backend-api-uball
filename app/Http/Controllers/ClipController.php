@@ -106,15 +106,23 @@ class ClipController extends Controller
             }
         }
 
+        // Generate default title if not provided
+        $defaultTitle = $request->input('title') ?: 'Basketball Highlight #' . time();
+        
+        // Ensure thumbnail URL is set (use default if auto-generation failed)
+        if (!$thumbnailUrl) {
+            $thumbnailUrl = '/image-1-12.png'; // Default basketball thumbnail
+        }
+
         $data = [
             'user_id' => Auth::id(),
             'game_id' => $request->input('gameId') ?: $request->input('game_id'),
             'video_url' => Storage::disk('public')->url($path),
             'external_video_url' => $request->input('videoUrl') ?: null,
             'thumbnail_url' => $thumbnailUrl,
-            'title' => $request->input('title') ?: null,
-            'description' => $request->input('description') ?: null,
-            'tags' => $request->input('tags') ? json_decode($request->input('tags'), true) : [],
+            'title' => $defaultTitle,
+            'description' => $request->input('description') ?: 'Basketball video highlight',
+            'tags' => $request->input('tags') ? json_decode($request->input('tags'), true) : ['Highlight'],
             'team_name' => $request->input('teamName') ?: null,
             'opponent_team' => $request->input('opponentTeam') ?: null,
             'game_result' => $request->input('gameResult') ?: null,
@@ -128,11 +136,17 @@ class ClipController extends Controller
             'show_in_profile' => $request->boolean('showInProfile', true),
             'feature_on_dashboard' => $request->boolean('featureOnDashboard'),
             'season' => $request->input('season', '2024'),
+            // Initialize counters
+            'views_count' => 0,
+            'likes_count' => 0,
+            'comments_count' => 0,
             // Auto-approve if uploader is admin; otherwise pending
             'status' => Gate::allows('is-admin') ? 'approved' : 'pending',
         ];
         if (Schema::hasColumn('clips', 'player_id')) {
-            $data['player_id'] = $request->input('playerId') ?: $request->input('player_id') ?: null;
+            $playerId = $request->input('playerId') ?: $request->input('player_id');
+            // Handle 'none' value from frontend
+            $data['player_id'] = ($playerId && $playerId !== 'none') ? (int) $playerId : null;
         }
         if (Schema::hasColumn('clips', 'duration')) {
             $data['duration'] = $request->input('duration') ? (int) $request->input('duration') : null;
@@ -141,10 +155,11 @@ class ClipController extends Controller
         $clip->load(['user:id,name,profile_photo', 'game:id,location,game_date', 'player:id,name,profile_photo']);
 
         // If a player is selected, create a PlayerStat entry (use zero defaults when stat fields are not provided)
-        if ($request->filled('playerId') || $request->filled('player_id')) {
+        $playerIdForStats = $request->input('playerId') ?: $request->input('player_id');
+        if ($playerIdForStats && $playerIdForStats !== 'none') {
             PlayerStat::create([
                 'game_id' => $request->input('gameId') ?: $request->input('game_id'),
-                'user_id' => (int) ($request->input('playerId') ?: $request->input('player_id')),
+                'user_id' => (int) $playerIdForStats,
                 'points' => (int) ($request->input('points') ?? 0),
                 'rebounds' => (int) ($request->input('rebounds') ?? 0),
                 'assists' => (int) ($request->input('assists') ?? 0),
@@ -398,5 +413,36 @@ class ClipController extends Controller
         }
         $clip->delete();
         return response()->json(null, 204);
+    }
+
+    public function playerClips($playerId)
+    {
+        $clips = Clip::where('player_id', $playerId)
+            ->where('status', 'approved')
+            ->with(['user:id,name,profile_photo', 'game:id,location,game_date', 'player:id,name,profile_photo'])
+            ->orderByDesc('created_at')
+            ->get();
+        return ClipResource::collection($clips);
+    }
+
+    public function playerHighlights($playerId)
+    {
+        $clips = Clip::where('player_id', $playerId)
+            ->where('status', 'approved')
+            ->where(function($query) {
+                // Check in tags field (JSON array) for highlight variations
+                $query->whereJsonContains('tags', 'highlight')
+                      ->orWhereJsonContains('tags', 'HIGHLIGHT')
+                      ->orWhereJsonContains('tags', 'Highlight')
+                      ->orWhereJsonContains('tags', 'game_highlight')
+                      ->orWhereJsonContains('tags', 'GAME_HIGHLIGHT')
+                      ->orWhereJsonContains('tags', 'best_play')
+                      ->orWhereJsonContains('tags', 'BEST_PLAY');
+            })
+            ->with(['user:id,name,profile_photo', 'game:id,location,game_date', 'player:id,name,profile_photo'])
+            ->orderByDesc('id')
+            ->take(4)
+            ->get();
+        return ClipResource::collection($clips);
     }
 }
