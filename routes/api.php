@@ -119,6 +119,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('me/notifications/read-all', [NotificationController::class, 'markAllRead']);
 });
 
+// Recent Activity (dashboard widget)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('activity', [ActivityController::class, 'index']);
+});
+
 // Posts API
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('posts', [PostsController::class, 'index']);
