@@ -131,6 +131,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('posts/{post}', [PostsController::class, 'show']);
     Route::post('posts', [PostsController::class, 'store']);
     Route::post('posts/{post}/like', [PostsController::class, 'toggleLike']);
+    Route::post('posts/{post}/view', [PostsController::class, 'incrementView']);
     
     // Comments
     Route::get('posts/{post}/comments', [PostsController::class, 'getComments']);

@@ -219,4 +219,21 @@ class PostsController extends Controller
 
         return response()->json(['message' => 'Comment deleted successfully']);
     }
+
+    /**
+     * Increment view count for a post/clip
+     */
+    public function incrementView($id): JsonResponse
+    {
+        // Find the clip
+        $clip = Clip::findOrFail($id);
+        
+        // Increment views_count
+        $clip->increment('views_count');
+        
+        return response()->json([
+            'message' => 'View counted',
+            'views_count' => $clip->fresh()->views_count
+        ]);
+    }
 }
