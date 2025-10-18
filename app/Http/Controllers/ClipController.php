@@ -227,6 +227,8 @@ class ClipController extends Controller
         $this->authorize('update', $clip);
         $validated = $request->validated();
 
+        $oldStatus = $clip->status;
+        
         $updates = [];
         if (array_key_exists('status', $validated)) $updates['status'] = $validated['status'];
         if (array_key_exists('description', $validated)) $updates['description'] = $validated['description'];
@@ -234,8 +236,36 @@ class ClipController extends Controller
         if (!empty($updates)) {
             $clip->update($updates);
         }
+        
+        // If clip was just approved, notify followers and people you follow
+        if ($oldStatus !== 'approved' && $clip->status === 'approved') {
+            $this->notifyFollowersAndFollowingOfNewPost($clip);
+        }
+        
         $clip->load(['user:id,name,profile_photo', 'game:id,location,game_date', 'player:id,name,profile_photo']);
         return new ClipResource($clip);
+    }
+    
+    /**
+     * Notify followers and people who follow the clip owner when a new post is approved
+     */
+    private function notifyFollowersAndFollowingOfNewPost(Clip $clip)
+    {
+        // Get all followers of the clip owner (people who follow the clip owner)
+        $followers = $clip->user->followers;
+        
+        // Get all people the clip owner follows
+        $following = $clip->user->following;
+        
+        // Notify followers: "Someone you follow posted a new clip"
+        foreach ($followers as $follower) {
+            $follower->notify(new \App\Notifications\NewPostByFollowing($clip));
+        }
+        
+        // Notify people the clip owner follows: "Your follower posted a new clip"
+        foreach ($following as $followedUser) {
+            $followedUser->notify(new \App\Notifications\NewPostByFollower($clip));
+        }
     }
 
     /**

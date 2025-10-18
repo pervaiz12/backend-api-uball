@@ -99,8 +99,8 @@ class PostsController extends Controller
     {
         $userId = auth()->id();
         
-        // Find the clip
-        $clip = Clip::findOrFail($id);
+        // Find the clip with user relationship
+        $clip = Clip::with('user')->findOrFail($id);
         
         // Check if user already liked this clip
         $existingLike = Like::where('user_id', $userId)
@@ -115,11 +115,21 @@ class PostsController extends Controller
             $isLiked = false;
         } else {
             // Like: Add the like
-            Like::create([
+            $like = Like::create([
                 'user_id' => $userId,
                 'clip_id' => $clip->id,
             ]);
             $clip->increment('likes_count');
+            
+            // Send notification to clip owner (if not liking own clip)
+            if ($clip->user_id !== $userId && $clip->user) {
+                try {
+                    $clip->user->notify(new \App\Notifications\PostLiked($like));
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send like notification: ' . $e->getMessage());
+                }
+            }
+            
             $message = 'Clip liked';
             $isLiked = true;
         }
@@ -152,8 +162,8 @@ class PostsController extends Controller
      */
     public function addComment(Request $request, $id): JsonResponse
     {
-        // Find the clip
-        $clip = Clip::findOrFail($id);
+        // Find the clip with user relationship
+        $clip = Clip::with('user')->findOrFail($id);
         
         $validated = $request->validate([
             'content' => 'required|string|max:1000',
@@ -167,6 +177,15 @@ class PostsController extends Controller
 
         // Increment comment count
         $clip->increment('comments_count');
+
+        // Send notification to clip owner (if not commenting on own clip)
+        if ($clip->user_id !== auth()->id() && $clip->user) {
+            try {
+                $clip->user->notify(new \App\Notifications\PostCommented($comment));
+            } catch (\Exception $e) {
+                \Log::error('Failed to send comment notification: ' . $e->getMessage());
+            }
+        }
 
         // Load user relationship
         $comment->load(['user:id,name,profile_photo']);
