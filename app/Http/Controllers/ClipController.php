@@ -104,7 +104,14 @@ class ClipController extends Controller
             ], 422);
         }
 
-        $path = $request->file('video')->store('clips', 'public');
+        $uploadedFile = $request->file('video');
+        $originalPath = $uploadedFile->store('clips/temp', 'public');
+        
+        // Convert video to H.264 codec for browser compatibility
+        $convertedPath = $this->convertVideoToH264($originalPath);
+        
+        // Use converted path if conversion succeeded, otherwise use original
+        $path = $convertedPath ?: $originalPath;
 
         // Handle thumbnail upload or auto-generate from video
         $thumbnailUrl = null;
@@ -265,6 +272,90 @@ class ClipController extends Controller
         // Notify people the clip owner follows: "Your follower posted a new clip"
         foreach ($following as $followedUser) {
             $followedUser->notify(new \App\Notifications\NewPostByFollower($clip));
+        }
+    }
+
+    /**
+     * Convert video to H.264 codec for browser compatibility
+     */
+    private function convertVideoToH264(string $tempPath): ?string
+    {
+        try {
+            // Get the full path to the temporary video file
+            $fullTempPath = Storage::disk('public')->path($tempPath);
+            
+            // Check if video file exists
+            if (!file_exists($fullTempPath)) {
+                \Log::warning("Temp video file not found for conversion: {$fullTempPath}");
+                return null;
+            }
+
+            // Check if FFmpeg is available
+            if (!$this->isFFmpegAvailable()) {
+                \Log::warning("FFmpeg not available for video conversion");
+                return null;
+            }
+
+            // Check video codec
+            $codecCheck = [];
+            exec("ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 " . escapeshellarg($fullTempPath) . " 2>&1", $codecCheck);
+            $currentCodec = trim($codecCheck[0] ?? '');
+            
+            // If already H.264, just move it to final location
+            if ($currentCodec === 'h264') {
+                $finalPath = str_replace('clips/temp/', 'clips/', $tempPath);
+                $fullFinalPath = Storage::disk('public')->path($finalPath);
+                
+                // Ensure clips directory exists
+                $clipsDir = dirname($fullFinalPath);
+                if (!is_dir($clipsDir)) {
+                    mkdir($clipsDir, 0755, true);
+                }
+                
+                rename($fullTempPath, $fullFinalPath);
+                return $finalPath;
+            }
+
+            // Generate unique filename for converted video
+            $convertedName = 'converted_' . time() . '_' . uniqid() . '.mp4';
+            $convertedPath = 'clips/' . $convertedName;
+            $fullConvertedPath = Storage::disk('public')->path($convertedPath);
+
+            // Ensure clips directory exists
+            $clipsDir = dirname($fullConvertedPath);
+            if (!is_dir($clipsDir)) {
+                mkdir($clipsDir, 0755, true);
+            }
+
+            // Convert video to H.264 with AAC audio
+            $command = sprintf(
+                'ffmpeg -i %s -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart -y %s 2>&1',
+                escapeshellarg($fullTempPath),
+                escapeshellarg($fullConvertedPath)
+            );
+
+            \Log::info("Converting video from {$currentCodec} to H.264: {$command}");
+
+            $output = [];
+            $returnVar = 0;
+            exec($command, $output, $returnVar);
+
+            // Delete temporary file
+            if (file_exists($fullTempPath)) {
+                unlink($fullTempPath);
+            }
+
+            if ($returnVar === 0 && file_exists($fullConvertedPath)) {
+                \Log::info("Video conversion successful: {$convertedPath}");
+                return $convertedPath;
+            }
+
+            \Log::error("Video conversion failed. Return code: {$returnVar}. Output: " . implode("\n", $output));
+            return null;
+
+        } catch (\Exception $e) {
+            \Log::error("Error converting video: " . $e->getMessage());
+            return null;
         }
     }
 

@@ -38,7 +38,13 @@ class PostsController extends Controller
             
             // Map clip fields to post-like structure for frontend compatibility
             $clip->content = $clip->description;
-            $clip->media_url = $clip->video_url;
+            
+            // Fix video URL to use 127.0.0.1 instead of localhost for consistency
+            $videoUrl = $clip->video_url;
+            if ($videoUrl) {
+                $videoUrl = str_replace('http://localhost:', 'http://127.0.0.1:', $videoUrl);
+            }
+            $clip->media_url = $videoUrl;
             $clip->media_type = 'video';
             
             // Keep both user and player - frontend will use player if available
