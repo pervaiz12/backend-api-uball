@@ -7,8 +7,10 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use App\Notifications\UserFollowedNotification;
 
 class UsersController extends Controller
 {
@@ -173,6 +175,22 @@ class UsersController extends Controller
             'following_id' => $playerId,
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+        
+        // Send follow notification
+        $follower = auth()->user();
+        $player->notify(new UserFollowedNotification(
+            followerId: $follower->id,
+            followerName: $follower->name,
+            followerProfilePhoto: $follower->profile_photo
+        ));
+        
+        // Debug logging
+        \Log::info('Follow notification sent (UsersController)', [
+            'follower_id' => $follower->id,
+            'follower_name' => $follower->name,
+            'followed_player_id' => $player->id,
+            'followed_player_name' => $player->name
         ]);
         
         return response()->json(['message' => 'Successfully followed player']);
