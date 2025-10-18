@@ -15,7 +15,10 @@ use App\Http\Requests\ClipUpdateRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\PlayerTaggedInClip;
+use App\Notifications\NewClipNotification;
+use App\Notifications\ClipUploadedForPlayerNotification;
 use Illuminate\Support\Facades\Gate;
+use App\Events\NewClipUploaded;
 
 class ClipController extends Controller
 {
@@ -202,18 +205,47 @@ class ClipController extends Controller
             ]);
 
             // Notify followers of the tagged player
-            $playerId = (int) $request->input('player_id');
+            $playerId = (int) $playerIdForStats;
             $player = User::find($playerId);
             if ($player) {
+                // First, notify the player that a clip was uploaded for them
+                $uploader = User::find(Auth::id());
+                if ($uploader && $clip->status === 'approved') {
+                    $player->notify(new ClipUploadedForPlayerNotification(
+                        clipId: $clip->id,
+                        uploaderId: $uploader->id,
+                        uploaderName: $uploader->name,
+                        clipTitle: $clip->title ?? 'New Basketball Clip',
+                        thumbnailUrl: $clip->thumbnail_url
+                    ));
+                }
+                
+                // Then notify followers
                 $followerIds = $player->followers()->pluck('users.id');
                 if ($followerIds->count() > 0) {
                     $followers = User::whereIn('id', $followerIds)->get();
+                    
+                    // Send tagged notification
                     Notification::send($followers, new PlayerTaggedInClip(
                         clipId: $clip->id,
                         playerId: $player->id,
                         playerName: $player->name,
                         description: $clip->description
                     ));
+                    
+                    // If clip is auto-approved (admin upload), send push notification and broadcast real-time event
+                    if ($clip->status === 'approved') {
+                        Notification::send($followers, new NewClipNotification(
+                            clipId: $clip->id,
+                            playerId: $player->id,
+                            playerName: $player->name,
+                            clipTitle: $clip->title ?? 'New Basketball Clip',
+                            thumbnailUrl: $clip->thumbnail_url
+                        ));
+                        
+                        // Broadcast real-time socket notification to all followers
+                        broadcast(new NewClipUploaded($clip, $player, $followerIds->toArray()));
+                    }
                 }
             }
         }
@@ -227,13 +259,41 @@ class ClipController extends Controller
         $this->authorize('update', $clip);
         $validated = $request->validated();
 
+        $oldStatus = $clip->status;
         $updates = [];
         if (array_key_exists('status', $validated)) $updates['status'] = $validated['status'];
         if (array_key_exists('description', $validated)) $updates['description'] = $validated['description'];
         if (array_key_exists('player_id', $validated)) $updates['player_id'] = $validated['player_id'];
+        
         if (!empty($updates)) {
             $clip->update($updates);
         }
+        
+        // If status changed from pending to approved, notify followers
+        if (isset($updates['status']) && $updates['status'] === 'approved' && $oldStatus !== 'approved') {
+            if ($clip->player_id) {
+                $player = User::find($clip->player_id);
+                if ($player) {
+                    $followerIds = $player->followers()->pluck('users.id');
+                    if ($followerIds->count() > 0) {
+                        $followers = User::whereIn('id', $followerIds)->get();
+                        
+                        // Send push notification to all followers
+                        Notification::send($followers, new NewClipNotification(
+                            clipId: $clip->id,
+                            playerId: $player->id,
+                            playerName: $player->name,
+                            clipTitle: $clip->title ?? 'New Basketball Clip',
+                            thumbnailUrl: $clip->thumbnail_url
+                        ));
+                        
+                        // Broadcast real-time socket notification to all followers
+                        broadcast(new NewClipUploaded($clip, $player, $followerIds->toArray()));
+                    }
+                }
+            }
+        }
+        
         $clip->load(['user:id,name,profile_photo', 'game:id,location,game_date', 'player:id,name,profile_photo']);
         return new ClipResource($clip);
     }

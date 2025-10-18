@@ -1,11 +1,19 @@
 <?php
 
 use Illuminate\Support\Facades\Broadcast;
-use Illuminate\Support\Facades\Auth;
 
-// Register auth endpoint for private channels at /api/broadcasting/auth
-Broadcast::routes(['middleware' => ['auth:sanctum'], 'prefix' => 'api']);
+/*
+|--------------------------------------------------------------------------
+| Broadcast Channels
+|--------------------------------------------------------------------------
+|
+| Here you may register all of the event broadcasting channels that your
+| application supports. The given channel authorization callbacks are
+| used to check if an authenticated user can listen to the channel.
+|
+*/
 
 Broadcast::channel('notifications.{userId}', function ($user, $userId) {
+    // Allow user to listen to their own notification channel
     return (int) $user->id === (int) $userId;
 });

@@ -31,6 +31,8 @@ class User extends Authenticatable
         'google_id',
         'facebook_id',
         'apple_id',
+        'fcm_token',
+        'fcm_token_updated_at',
     ];
 
     /**

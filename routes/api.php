@@ -90,6 +90,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('messages/conversation/{userId}/read', [MessageController::class, 'markConversationRead']);
 });
 
+// FCM Token Management
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('me/fcm-token', function(Request $request) {
+        $request->validate(['fcm_token' => 'required|string|max:255']);
+        $request->user()->update(['fcm_token' => $request->fcm_token]);
+        return response()->json(['message' => 'FCM token stored successfully']);
+    });
+    Route::delete('me/fcm-token', function(Request $request) {
+        $request->user()->update(['fcm_token' => null]);
+        return response()->json(['message' => 'FCM token removed successfully']);
+    });
+});
+
 // Admin
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('users/{user}/approve', [AdminController::class, 'approve']);
@@ -118,6 +131,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('me/notifications/unread', [NotificationController::class, 'unread']);
     Route::patch('me/notifications/{id}', [NotificationController::class, 'markRead']);
     Route::post('me/notifications/read-all', [NotificationController::class, 'markAllRead']);
+    
+    // Push notification tokens
+    Route::post('me/fcm-token', [NotificationController::class, 'registerFcmToken']);
+    Route::delete('me/fcm-token', [NotificationController::class, 'removeFcmToken']);
 });
 
 // Recent Activity

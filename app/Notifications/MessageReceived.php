@@ -4,10 +4,13 @@ namespace App\Notifications;
 
 use App\Models\Message;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use App\Services\FcmService;
+use Illuminate\Support\Facades\Log;
 
-class MessageReceived extends Notification
+class MessageReceived extends Notification implements ShouldQueue
 {
     use Queueable;
 
@@ -19,8 +22,8 @@ class MessageReceived extends Notification
 
     public function via(object $notifiable): array
     {
-        // Database notifications (read by NotificationController)
-        return ['database'];
+        // Database notifications + FCM push notifications
+        return ['database', 'fcm'];
     }
 
     public function toArray(object $notifiable): array
@@ -53,5 +56,52 @@ class MessageReceived extends Notification
             'attachment_size' => $this->message->attachment_size,
             'created_at' => $this->message->created_at?->toISOString(),
         ];
+    }
+
+    /**
+     * Send FCM push notification
+     */
+    public function toFcm(object $notifiable): bool
+    {
+        // Check if user has FCM token
+        if (empty($notifiable->fcm_token)) {
+            Log::info('FCM: User has no token', ['user_id' => $notifiable->id]);
+            return false;
+        }
+
+        $fcmService = app(FcmService::class);
+
+        $senderName = $this->message->sender->name ?? 'Someone';
+        $messageBody = $this->message->body;
+        
+        // Truncate long messages for notification
+        $previewText = $messageBody;
+        if (strlen($messageBody) > 50) {
+            $previewText = substr($messageBody, 0, 47) . '...';
+        }
+        
+        // If there's an attachment but no text
+        if (empty($messageBody) && $this->message->attachment_name) {
+            $previewText = '📎 ' . $this->message->attachment_name;
+        }
+
+        $notification = [
+            'title' => '💬 New Message',
+            'body' => "{$senderName}: {$previewText}",
+            'click_action' => 'OPEN_MESSAGE',
+        ];
+
+        $data = [
+            'type' => 'message_received',
+            'message_id' => (string) $this->message->id,
+            'sender_id' => (string) $this->message->sender_id,
+            'sender_name' => $senderName,
+            'sender_photo' => $this->message->sender->profile_photo ?? '',
+            'body' => $messageBody,
+            'has_attachment' => !empty($this->message->attachment_name) ? 'true' : 'false',
+            'attachment_type' => $this->message->attachment_type ?? '',
+        ];
+
+        return $fcmService->sendToDevice($notifiable->fcm_token, $notification, $data);
     }
 }

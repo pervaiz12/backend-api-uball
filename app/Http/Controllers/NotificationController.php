@@ -58,4 +58,39 @@ class NotificationController extends Controller
         $user->unreadNotifications->markAsRead();
         return response()->json(['message' => 'All notifications marked as read']);
     }
+
+    /**
+     * Register or update FCM device token for push notifications
+     */
+    public function registerFcmToken(Request $request)
+    {
+        $validated = $request->validate([
+            'fcm_token' => 'required|string|max:255',
+        ]);
+
+        $user = Auth::user();
+        $user->fcm_token = $validated['fcm_token'];
+        $user->fcm_token_updated_at = now();
+        $user->save();
+
+        return response()->json([
+            'message' => 'FCM token registered successfully',
+            'token_updated_at' => $user->fcm_token_updated_at,
+        ]);
+    }
+
+    /**
+     * Remove FCM token (e.g., on logout)
+     */
+    public function removeFcmToken(Request $request)
+    {
+        $user = Auth::user();
+        $user->fcm_token = null;
+        $user->fcm_token_updated_at = null;
+        $user->save();
+
+        return response()->json([
+            'message' => 'FCM token removed successfully',
+        ]);
+    }
 }

@@ -7,6 +7,9 @@ use App\Models\PostLike;
 use App\Models\PostComment;
 use App\Models\Clip;
 use App\Models\Like;
+use App\Models\User;
+use App\Notifications\PostLikedNotification;
+use App\Notifications\PostCommentedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -122,6 +125,43 @@ class PostsController extends Controller
             $clip->increment('likes_count');
             $message = 'Clip liked';
             $isLiked = true;
+            
+            // Send notification to clip owner (but not if they liked their own clip)
+            if ($clip->player_id !== $userId) {
+                $liker = User::find($userId);
+                $clipOwner = User::find($clip->player_id);
+                
+                // Debug logging
+                \Log::info('Like notification debug', [
+                    'clip_id' => $clip->id,
+                    'clip_owner_id' => $clip->player_id,
+                    'liker_id' => $userId,
+                    'liker_found' => $liker ? 'yes' : 'no',
+                    'clip_owner_found' => $clipOwner ? 'yes' : 'no'
+                ]);
+                
+                if ($clipOwner && $liker) {
+                    try {
+                        $clipOwner->notify(new PostLikedNotification(
+                            postId: $clip->id,
+                            likerId: $liker->id,
+                            likerName: $liker->name,
+                            postContent: $clip->title ?? $clip->description,
+                            likerProfilePhoto: $liker->profile_photo
+                        ));
+                        \Log::info('Like notification sent successfully', ['clip_id' => $clip->id]);
+                    } catch (\Exception $e) {
+                        \Log::error('Like notification failed', ['error' => $e->getMessage()]);
+                    }
+                } else {
+                    \Log::warning('Like notification skipped - missing users', [
+                        'liker' => $liker ? 'found' : 'missing',
+                        'clip_owner' => $clipOwner ? 'found' : 'missing'
+                    ]);
+                }
+            } else {
+                \Log::info('Like notification skipped - user liked own clip', ['user_id' => $userId]);
+            }
         }
         
         return response()->json([
@@ -167,9 +207,47 @@ class PostsController extends Controller
 
         // Increment comment count
         $clip->increment('comments_count');
-
         // Load user relationship
         $comment->load(['user:id,name,profile_photo']);
+
+        // Send notification to clip owner (but not if they commented on their own clip)
+        $userId = auth()->id();
+        if ($clip->player_id !== $userId) {
+            $commenter = User::find($userId);
+            $clipOwner = User::find($clip->player_id);
+            
+            // Debug logging
+            \Log::info('Comment notification debug', [
+                'clip_id' => $clip->id,
+                'clip_owner_id' => $clip->player_id,
+                'commenter_id' => $userId,
+                'commenter_found' => $commenter ? 'yes' : 'no',
+                'clip_owner_found' => $clipOwner ? 'yes' : 'no'
+            ]);
+            
+            if ($clipOwner && $commenter) {
+                try {
+                    $clipOwner->notify(new PostCommentedNotification(
+                        postId: $clip->id,
+                        commenterId: $commenter->id,
+                        commenterName: $commenter->name,
+                        commentContent: $validated['content'],
+                        postContent: $clip->title ?? $clip->description,
+                        commenterProfilePhoto: $commenter->profile_photo
+                    ));
+                    \Log::info('Comment notification sent successfully', ['clip_id' => $clip->id]);
+                } catch (\Exception $e) {
+                    \Log::error('Comment notification failed', ['error' => $e->getMessage()]);
+                }
+            } else {
+                \Log::warning('Comment notification skipped - missing users', [
+                    'commenter' => $commenter ? 'found' : 'missing',
+                    'clip_owner' => $clipOwner ? 'found' : 'missing'
+                ]);
+            }
+        } else {
+            \Log::info('Comment notification skipped - user commented on own clip', ['user_id' => $userId]);
+        }
 
         return response()->json($comment, 201);
     }
