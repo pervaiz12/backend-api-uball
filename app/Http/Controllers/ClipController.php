@@ -19,6 +19,7 @@ use App\Notifications\NewClipNotification;
 use App\Notifications\ClipUploadedForPlayerNotification;
 use Illuminate\Support\Facades\Gate;
 use App\Events\NewClipUploaded;
+use App\Services\VideoConversionService;
 
 class ClipController extends Controller
 {
@@ -85,9 +86,9 @@ class ClipController extends Controller
         // Set PHP runtime limits for large file uploads
         ini_set('upload_max_filesize', '512M');
         ini_set('post_max_size', '512M');
-        ini_set('max_execution_time', '300');
-        ini_set('max_input_time', '300');
-        ini_set('memory_limit', '256M');
+        ini_set('max_execution_time', '600'); // Increased for video conversion
+        ini_set('max_input_time', '600');
+        ini_set('memory_limit', '512M'); // Increased for video processing
         
         $this->authorize('create', Clip::class);
 
@@ -108,6 +109,19 @@ class ClipController extends Controller
         }
 
         $path = $request->file('video')->store('clips', 'public');
+
+        // Convert video to browser-compatible format
+        $videoConversionService = new VideoConversionService();
+        $convertedPath = $videoConversionService->convertToBrowserCompatible($path);
+        
+        // Use converted video if conversion was successful, otherwise use original
+        if ($convertedPath) {
+            \Log::info("Video converted successfully: {$convertedPath}");
+            $finalVideoPath = $convertedPath;
+        } else {
+            \Log::warning("Video conversion failed, using original: {$path}");
+            $finalVideoPath = $path;
+        }
 
         // Handle thumbnail upload or auto-generate from video
         $thumbnailUrl = null;
@@ -149,7 +163,7 @@ class ClipController extends Controller
         $data = [
             'user_id' => Auth::id(),
             'game_id' => $request->input('gameId') ?: $request->input('game_id'),
-            'video_url' => Storage::disk('public')->url($path),
+            'video_url' => Storage::disk('public')->url($finalVideoPath),
             'external_video_url' => $request->input('videoUrl') ?: null,
             'thumbnail_url' => $thumbnailUrl,
             'title' => $defaultTitle,
