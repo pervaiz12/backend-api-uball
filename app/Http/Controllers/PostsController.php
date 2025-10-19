@@ -199,7 +199,7 @@ class PostsController extends Controller
         return response()->json([
             'message' => $message,
             'likes_count' => $clip->fresh()->likes_count,
-            'is_liked' => $isLiked
+            'liked' => $isLiked
         ]);
     }
 
