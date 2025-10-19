@@ -42,6 +42,16 @@ class NotificationController extends Controller
         return response()->json(['data' => $list]);
     }
 
+    public function unreadCount()
+    {
+        $user = Auth::user();
+        if (!Schema::hasTable('notifications')) {
+            return response()->json(['count' => 0]);
+        }
+        $count = $user->unreadNotifications()->count();
+        return response()->json(['count' => $count]);
+    }
+
     public function markRead(string $id)
     {
         $user = Auth::user();

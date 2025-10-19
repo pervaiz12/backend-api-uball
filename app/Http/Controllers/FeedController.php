@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Clip;
 use App\Models\Comment;
 use App\Models\Like;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Resources\ClipResource;
 use Illuminate\Support\Facades\Gate;
+use App\Notifications\PostCommentedNotification;
+use App\Events\PostCommented;
 
 class FeedController extends Controller
 {
@@ -67,6 +70,46 @@ class FeedController extends Controller
             'clip_id' => $clip->id,
             'body' => $validated['body'],
         ]);
+
+        // Increment comment count
+        $clip->increment('comments_count');
+
+        // Send notification to clip owner (but not if they commented on their own clip)
+        if ($clip->player_id !== $auth->id) {
+            $clipOwner = User::find($clip->player_id);
+            
+            if ($clipOwner) {
+                try {
+                    \Log::info('Creating comment notification', [
+                        'clip_id' => $clip->id,
+                        'clip_owner_id' => $clip->player_id,
+                        'commenter_id' => $auth->id,
+                        'commenter_name' => $auth->name
+                    ]);
+
+                    // Database notification
+                    $clipOwner->notify(new PostCommentedNotification(
+                        postId: $clip->id,
+                        commenterId: $auth->id,
+                        commenterName: $auth->name,
+                        commentContent: $validated['body'],
+                        postContent: $clip->title ?? $clip->description,
+                        commenterProfilePhoto: $auth->profile_photo
+                    ));
+                    
+                    // Real-time Pusher notification
+                    broadcast(new PostCommented($clip, $auth, $clipOwner, $validated['body']))->toOthers();
+                    
+                    \Log::info('Comment notification sent successfully', ['clip_id' => $clip->id]);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send comment notification', ['error' => $e->getMessage(), 'clip_id' => $clip->id]);
+                }
+            } else {
+                \Log::warning('Comment notification skipped - clip owner not found', ['clip_owner_id' => $clip->player_id]);
+            }
+        } else {
+            \Log::info('Comment notification skipped - user commented on own clip', ['user_id' => $auth->id]);
+        }
 
         return response()->json($comment->load('user:id,name,profile_photo'), 201);
     }

@@ -64,6 +64,63 @@ class RealtimeController extends Controller
                 'timestamp' => $message->created_at->toISOString(),
             ];
         }
+
+        // Get new database notifications since last check (for likes, comments, follows)
+        $newNotifications = $user->notifications()
+            ->where('created_at', '>', $lastCheck)
+            ->whereNull('read_at')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        foreach ($newNotifications as $notification) {
+            $data = $notification->data;
+            $type = $data['type'] ?? 'notification';
+            
+            // Handle different notification types
+            if ($type === 'post_commented') {
+                $updates[] = [
+                    'type' => 'comment_notification',
+                    'title' => '💬 New Comment',
+                    'message' => $data['commenter_name'] . ' commented on your post',
+                    'data' => [
+                        'notification_id' => $notification->id,
+                        'post_id' => $data['post_id'],
+                        'commenter_id' => $data['commenter_id'],
+                        'commenter_name' => $data['commenter_name'],
+                        'comment_content' => $data['comment_content'],
+                        'action_url' => $data['action_url'] ?? null,
+                    ],
+                    'timestamp' => $notification->created_at->toISOString(),
+                ];
+            } elseif ($type === 'post_liked') {
+                $updates[] = [
+                    'type' => 'like_notification',
+                    'title' => '❤️ New Like',
+                    'message' => $data['liker_name'] . ' liked your post',
+                    'data' => [
+                        'notification_id' => $notification->id,
+                        'post_id' => $data['post_id'],
+                        'liker_id' => $data['liker_id'],
+                        'liker_name' => $data['liker_name'],
+                        'action_url' => $data['action_url'] ?? null,
+                    ],
+                    'timestamp' => $notification->created_at->toISOString(),
+                ];
+            } elseif ($type === 'user_followed') {
+                $updates[] = [
+                    'type' => 'follow_notification',
+                    'title' => '👥 New Follower',
+                    'message' => $data['follower_name'] . ' started following you',
+                    'data' => [
+                        'notification_id' => $notification->id,
+                        'follower_id' => $data['follower_id'],
+                        'follower_name' => $data['follower_name'],
+                        'action_url' => $data['action_url'] ?? null,
+                    ],
+                    'timestamp' => $notification->created_at->toISOString(),
+                ];
+            }
+        }
         
         return response()->json([
             'updates' => $updates,
