@@ -63,13 +63,38 @@ class PostsController extends Controller
     }
 
     /**
-     * Get a single post
+     * Get a single post (actually a clip)
      */
-    public function show(Post $post): JsonResponse
+    public function show($id): JsonResponse
     {
-        $post->load(['user:id,name,profile_photo,role,is_official,city']);
+        $currentUserId = auth()->id();
         
-        return response()->json($post);
+        // Fetch clip with same relationships as index method
+        $clip = Clip::with(['user:id,name,profile_photo,role,is_official,city', 'player:id,name,profile_photo,role,is_official', 'game:id,location,game_date'])
+            ->where('status', 'approved')
+            ->find($id);
+        
+        if (!$clip) {
+            return response()->json([
+                'message' => 'Post not found or has been deleted',
+                'error' => 'POST_NOT_FOUND'
+            ], 404);
+        }
+        
+        // Apply same transformation as index method
+        // Check if current user liked this clip
+        $isLiked = Like::where('user_id', $currentUserId)
+            ->where('clip_id', $clip->id)
+            ->exists();
+        
+        $clip->is_liked_by_user = $isLiked;
+        
+        // Map clip fields to post-like structure for frontend compatibility
+        $clip->content = $clip->description;
+        $clip->media_url = $clip->video_url;
+        $clip->media_type = 'video';
+        
+        return response()->json($clip);
     }
 
     /**
