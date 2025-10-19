@@ -162,6 +162,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('players', [UsersController::class, 'publicPlayers']);
     Route::get('/players/top-officials', [UsersController::class, 'topOfficialPlayers']);
     Route::get('/players/suggested', [UsersController::class, 'suggestedPlayers']);
+    Route::get('/players/search', [UsersController::class, 'searchPlayers']);
     Route::post('/players/{playerId}/follow', [UsersController::class, 'followPlayer']);
     Route::delete('/players/{playerId}/follow', [UsersController::class, 'unfollowPlayer']);
     Route::get('players/{user}', [UsersController::class, 'showPublic']);

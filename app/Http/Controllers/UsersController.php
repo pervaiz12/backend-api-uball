@@ -557,4 +557,63 @@ class UsersController extends Controller
         $user->save();
         return new UserResource($user);
     }
+
+    /**
+     * Search for players
+     */
+    public function searchPlayers(Request $request)
+    {
+        $query = $request->query('q', '');
+        $limit = min((int) $request->query('limit', 20), 50);
+        
+        if (empty(trim($query))) {
+            return response()->json([
+                'data' => [],
+                'message' => 'Search query is required'
+            ], 400);
+        }
+        
+        $players = User::where('role', 'player')
+            ->where(function ($q) use ($query) {
+                $q->where('name', 'LIKE', "%{$query}%")
+                  ->orWhere('city', 'LIKE', "%{$query}%")
+                  ->orWhere('home_court', 'LIKE', "%{$query}%");
+            })
+            ->select(['id', 'name', 'profile_photo', 'city', 'home_court', 'role', 'is_official'])
+            ->selectSub(function ($q) {
+                $q->from('followers')
+                  ->selectRaw('COUNT(*)')
+                  ->whereColumn('followers.following_id', 'users.id');
+            }, 'followers_count')
+            ->selectSub(function ($q) {
+                $q->from('clips')
+                  ->selectRaw('COUNT(DISTINCT game_id)')
+                  ->whereColumn('clips.player_id', 'users.id')
+                  ->whereNotNull('game_id');
+            }, 'games_count')
+            ->selectSub(function ($q) {
+                $q->from('clips')
+                  ->selectRaw('COUNT(*)')
+                  ->whereColumn('clips.user_id', 'users.id');
+            }, 'clips_count')
+            ->orderBy('is_official', 'desc')
+            ->orderBy('followers_count', 'desc')
+            ->limit($limit)
+            ->get();
+            
+        // Add is_following flag for each player
+        $currentUserId = auth()->id();
+        $players->each(function ($player) use ($currentUserId) {
+            $player->is_following = DB::table('followers')
+                ->where('follower_id', $currentUserId)
+                ->where('following_id', $player->id)
+                ->exists();
+        });
+        
+        return response()->json([
+            'data' => $players,
+            'query' => $query,
+            'count' => $players->count()
+        ]);
+    }
 }
