@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Resources\MessageResource;
 use App\Notifications\MessageReceived;
+use App\Events\MessageReceived as MessageReceivedEvent;
 
 class MessageController extends Controller
 {
@@ -92,10 +93,35 @@ class MessageController extends Controller
 
         $message = Message::create($data);
 
-        // Notify the receiver
+        // Notify the receiver via database notification
         $receiver = User::find($validated['receiver_id']);
         if ($receiver) {
-            $receiver->notify(new MessageReceived($message));
+            try {
+                \Log::info('Creating message notification', [
+                    'receiver_id' => $receiver->id,
+                    'sender_id' => $message->sender_id,
+                    'message_id' => $message->id
+                ]);
+                $receiver->notify(new MessageReceived($message));
+                \Log::info('Message notification created successfully');
+            } catch (\Exception $e) {
+                \Log::error('Failed to create message notification', ['error' => $e->getMessage()]);
+            }
+        } else {
+            \Log::warning('Receiver not found for message notification', ['receiver_id' => $validated['receiver_id']]);
+        }
+
+        // Broadcast real-time notification via Pusher
+        try {
+            \Log::info('Broadcasting MessageReceived event', [
+                'message_id' => $message->id,
+                'receiver_id' => $message->receiver_id,
+                'sender_id' => $message->sender_id
+            ]);
+            broadcast(new MessageReceivedEvent($message))->toOthers();
+            \Log::info('MessageReceived event broadcast successfully');
+        } catch (\Exception $e) {
+            \Log::error('Failed to broadcast MessageReceived event', ['error' => $e->getMessage()]);
         }
 
         return (new MessageResource(

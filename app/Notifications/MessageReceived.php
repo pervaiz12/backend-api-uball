@@ -10,7 +10,7 @@ use Illuminate\Notifications\Notification;
 use App\Services\FcmService;
 use Illuminate\Support\Facades\Log;
 
-class MessageReceived extends Notification implements ShouldQueue
+class MessageReceived extends Notification
 {
     use Queueable;
 
@@ -22,8 +22,8 @@ class MessageReceived extends Notification implements ShouldQueue
 
     public function via(object $notifiable): array
     {
-        // Database notifications + FCM push notifications
-        return ['database', 'fcm'];
+        // Database notifications only - real-time notifications handled by Pusher events
+        return ['database'];
     }
 
     public function toArray(object $notifiable): array

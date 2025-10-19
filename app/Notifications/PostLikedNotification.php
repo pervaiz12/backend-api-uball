@@ -24,8 +24,8 @@ class PostLikedNotification extends Notification
     public function via(object $notifiable): array
     {
         // Database: Store notification history
-        // FCM: Send push notification to user's device (disabled for now)
-        return ['database']; // Temporarily disable FCM to focus on database notifications
+        // Real-time notifications handled by Pusher events
+        return ['database'];
     }
 
     /**

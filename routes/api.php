@@ -16,9 +16,41 @@ use App\Http\Controllers\UsersController;
 use App\Http\Controllers\ClipController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PostsController;
+use App\Http\Controllers\RealtimeController;
 
 // Health check
 Route::get('/health', fn() => response()->json(['status' => 'ok']));
+
+// Test broadcasting
+Route::middleware('auth:sanctum')->post('/test-broadcast', function () {
+    $user = auth()->user();
+    \Log::info('Test broadcast triggered for user: ' . $user->id);
+    
+    try {
+        // Test network connectivity first
+        $pusherHost = 'api-ap2.pusherapp.com';
+        $dnsResult = gethostbyname($pusherHost);
+        \Log::info('DNS resolution test', ['host' => $pusherHost, 'resolved_ip' => $dnsResult]);
+        
+        if ($dnsResult === $pusherHost) {
+            return response()->json(['error' => 'Cannot resolve Pusher host: ' . $pusherHost . '. Check internet connection.'], 500);
+        }
+        
+        broadcast(new \App\Events\TestEvent($user->id, 'Broadcasting test from API'));
+        \Log::info('Test broadcast sent successfully');
+        return response()->json(['message' => 'Test broadcast sent', 'user_id' => $user->id]);
+    } catch (\Exception $e) {
+        \Log::error('Test broadcast failed: ' . $e->getMessage());
+        return response()->json(['error' => 'Broadcast failed: ' . $e->getMessage()], 500);
+    }
+});
+
+// Realtime fallback routes (for when Pusher is not available)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/realtime/updates', [RealtimeController::class, 'getUpdates']);
+    Route::post('/realtime/test', [RealtimeController::class, 'testNotification']);
+    Route::get('/realtime/test-notifications', [RealtimeController::class, 'getTestNotifications']);
+});
 
 // Auth
 Route::post('register', [AuthController::class, 'register']);

@@ -10,6 +10,8 @@ use App\Models\Like;
 use App\Models\User;
 use App\Notifications\PostLikedNotification;
 use App\Notifications\PostCommentedNotification;
+use App\Events\PostLiked;
+use App\Events\PostCommented;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -167,6 +169,7 @@ class PostsController extends Controller
                 
                 if ($clipOwner && $liker) {
                     try {
+                        // Database notification
                         $clipOwner->notify(new PostLikedNotification(
                             postId: $clip->id,
                             likerId: $liker->id,
@@ -174,6 +177,10 @@ class PostsController extends Controller
                             postContent: $clip->title ?? $clip->description,
                             likerProfilePhoto: $liker->profile_photo
                         ));
+                        
+                        // Real-time Pusher notification
+                        broadcast(new PostLiked($clip, $liker, $clipOwner))->toOthers();
+                        
                         \Log::info('Like notification sent successfully', ['clip_id' => $clip->id]);
                     } catch (\Exception $e) {
                         \Log::error('Like notification failed', ['error' => $e->getMessage()]);
@@ -252,6 +259,7 @@ class PostsController extends Controller
             
             if ($clipOwner && $commenter) {
                 try {
+                    // Database notification
                     $clipOwner->notify(new PostCommentedNotification(
                         postId: $clip->id,
                         commenterId: $commenter->id,
@@ -260,6 +268,10 @@ class PostsController extends Controller
                         postContent: $clip->title ?? $clip->description,
                         commenterProfilePhoto: $commenter->profile_photo
                     ));
+                    
+                    // Real-time Pusher notification
+                    broadcast(new PostCommented($clip, $commenter, $clipOwner, $validated['content']))->toOthers();
+                    
                     \Log::info('Comment notification sent successfully', ['clip_id' => $clip->id]);
                 } catch (\Exception $e) {
                     \Log::error('Comment notification failed', ['error' => $e->getMessage()]);
