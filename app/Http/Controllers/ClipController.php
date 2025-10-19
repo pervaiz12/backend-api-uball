@@ -240,7 +240,8 @@ class ClipController extends Controller
                             playerId: $player->id,
                             playerName: $player->name,
                             clipTitle: $clip->title ?? 'New Basketball Clip',
-                            thumbnailUrl: $clip->thumbnail_url
+                            thumbnailUrl: $clip->thumbnail_url,
+                            playerProfilePhoto: $player->profile_photo
                         ));
                         
                         // Broadcast real-time socket notification to all followers
@@ -284,7 +285,8 @@ class ClipController extends Controller
                             playerId: $player->id,
                             playerName: $player->name,
                             clipTitle: $clip->title ?? 'New Basketball Clip',
-                            thumbnailUrl: $clip->thumbnail_url
+                            thumbnailUrl: $clip->thumbnail_url,
+                            playerProfilePhoto: $player->profile_photo
                         ));
                         
                         // Broadcast real-time socket notification to all followers

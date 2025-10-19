@@ -18,6 +18,7 @@ class NewClipNotification extends Notification
         public string $playerName,
         public ?string $clipTitle = null,
         public ?string $thumbnailUrl = null,
+        public ?string $playerProfilePhoto = null,
     ) {}
 
     /**
@@ -40,6 +41,7 @@ class NewClipNotification extends Notification
             'clip_id' => $this->clipId,
             'player_id' => $this->playerId,
             'player_name' => $this->playerName,
+            'player_profile_photo' => $this->playerProfilePhoto,
             'clip_title' => $this->clipTitle,
             'thumbnail_url' => $this->thumbnailUrl,
             'message' => "{$this->playerName} has a new clip!",
