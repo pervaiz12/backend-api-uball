@@ -29,7 +29,17 @@ class ClipController extends Controller
         $perPage = (int) request()->query('per_page', 15);
         $perPage = $perPage > 0 ? min($perPage, 50) : 15;
 
-        $query = Clip::with(['user:id,name,profile_photo', 'game:id,location,game_date', 'player:id,name,profile_photo'])
+        // Select only necessary columns from clips table
+        $query = Clip::select([
+            'id', 'user_id', 'game_id', 'player_id', 'video_url', 'thumbnail_url',
+            'title', 'description', 'tags', 'status', 'views_count', 'likes_count',
+            'comments_count', 'created_at', 'updated_at'
+        ])
+            ->with([
+                'user:id,name,profile_photo',
+                'game:id,location,game_date',
+                'player:id,name,profile_photo'
+            ])
             ->where('status', 'approved') // Only show approved clips
             ->orderByDesc('id');
             

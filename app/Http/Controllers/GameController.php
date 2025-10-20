@@ -63,16 +63,10 @@ class GameController extends Controller
 
     public function playerGames($playerId)
     {
-        // Get games where the player has clips or stats (not just games they created)
-        $query = Game::where(function ($q) use ($playerId) {
-                $q->whereHas('clips', function ($subQ) use ($playerId) {
-                    $subQ->where('player_id', $playerId)->where('status', 'approved');
-                })
-                ->orWhereHas('playerStats', function ($subQ) use ($playerId) {
-                    $subQ->where('user_id', $playerId);
-                });
-            })
-            ->with(['playerStats', 'clips' => function ($q) use ($playerId) {
+        // Get all games and include player-specific data if available
+        $query = Game::with(['playerStats' => function ($q) use ($playerId) {
+                $q->where('user_id', $playerId);
+            }, 'clips' => function ($q) use ($playerId) {
                 $q->where('player_id', $playerId)->where('status', 'approved');
             }]);
             
