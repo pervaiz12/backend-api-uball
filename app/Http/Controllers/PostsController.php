@@ -46,8 +46,25 @@ class PostsController extends Controller
             $clip->media_url = $clip->video_url;
             $clip->media_type = 'video';
             
-            // Keep both user and player - frontend will use player if available
-            // No need to replace, just ensure both are loaded
+            // Fetch player stats if player exists
+            if ($clip->player_id) {
+                $stats = \App\Models\PlayerStat::where('user_id', $clip->player_id)
+                    ->selectRaw('
+                        ROUND(AVG(points), 1) as avg_points,
+                        ROUND(AVG(rebounds), 1) as avg_rebounds,
+                        ROUND(AVG(assists), 1) as avg_assists,
+                        ROUND(AVG(steals), 1) as avg_steals,
+                        ROUND(AVG(blocks), 1) as avg_blocks,
+                        ROUND(AVG(CASE WHEN fg_attempts > 0 THEN (fg_made * 100.0 / fg_attempts) ELSE 0 END), 1) as fg_percentage,
+                        ROUND(AVG(CASE WHEN three_attempts > 0 THEN (three_made * 100.0 / three_attempts) ELSE 0 END), 1) as three_percentage,
+                        COUNT(*) as games_played
+                    ')
+                    ->first();
+                
+                $clip->player_stats = $stats;
+            } else {
+                $clip->player_stats = null;
+            }
             
             return $clip;
         });
