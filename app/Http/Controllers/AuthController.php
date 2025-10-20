@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use App\Http\Resources\UserResource;
+use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
@@ -260,5 +261,63 @@ class AuthController extends Controller
             'user' => new UserResource($user),
             'message' => 'Apple authentication successful',
         ]);
+    }
+
+    /**
+     * Redirect to Google OAuth provider
+     */
+    public function redirectToGoogle()
+    {
+        return Socialite::driver('google')->redirect();
+    }
+
+    /**
+     * Handle Google OAuth callback
+     */
+    public function handleGoogleCallback()
+    {
+        try {
+            $googleUser = Socialite::driver('google')->user();
+            
+            // Check if user exists with this email
+            $user = User::where('email', $googleUser->getEmail())->first();
+
+            if ($user) {
+                // User exists, update google_id if not set
+                if (!$user->google_id) {
+                    $user->google_id = $googleUser->getId();
+                    $user->save();
+                }
+            } else {
+                // Create new user
+                $user = User::create([
+                    'name' => $googleUser->getName(),
+                    'email' => $googleUser->getEmail(),
+                    'google_id' => $googleUser->getId(),
+                    'profile_photo' => $googleUser->getAvatar(),
+                    'role' => 'player',
+                    'is_official' => false,
+                    'password' => Hash::make(uniqid()), // Random password for social login users
+                ]);
+            }
+
+            // Update last login
+            $user->last_login = now();
+            $user->save();
+
+            // Create token
+            $token = $user->createToken('api')->plainTextToken;
+
+            return response()->json([
+                'token' => $token,
+                'user' => new UserResource($user),
+                'message' => 'Google authentication successful',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Google authentication failed',
+                'error' => $e->getMessage(),
+            ], 400);
+        }
     }
 }
