@@ -6,12 +6,11 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use App\Http\Resources\UserResource;
-use Illuminate\Support\Facades\DB;
 use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
@@ -32,7 +31,6 @@ class AuthController extends Controller
             'is_official' => false,
         ]);
 
-        // Create token for automatic login
         $token = $user->createToken('api')->plainTextToken;
 
         return response()->json([
@@ -57,18 +55,17 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = Auth::user();
-        
-        // Restrict access to admin and staff only
+
         if ($user->role === 'player') {
             Auth::logout();
             throw ValidationException::withMessages([
                 'email' => ['Access denied. Only admin and staff can access this dashboard.'],
             ]);
         }
-        
-        // Update last login timestamp
+
         $user->last_login = now();
         $user->save();
+
         $token = $user->createToken('api')->plainTextToken;
 
         return response()->json([
@@ -92,18 +89,17 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = Auth::user();
-        
-        // Only allow players to login through this endpoint
+
         if ($user->role !== 'player') {
             Auth::logout();
             throw ValidationException::withMessages([
                 'email' => ['This login is for players only.'],
             ]);
         }
-        
-        // Update last login timestamp
+
         $user->last_login = now();
         $user->save();
+
         $token = $user->createToken('api')->plainTextToken;
 
         return response()->json([
@@ -133,17 +129,14 @@ class AuthController extends Controller
             'profile_photo' => ['nullable', 'string'],
         ]);
 
-        // Check if user exists with this email
         $user = User::where('email', $validated['email'])->first();
 
         if ($user) {
-            // User exists, update google_id if not set
             if (!$user->google_id) {
                 $user->google_id = $validated['google_id'];
                 $user->save();
             }
         } else {
-            // Create new user
             $user = User::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
@@ -151,15 +144,13 @@ class AuthController extends Controller
                 'profile_photo' => $validated['profile_photo'] ?? null,
                 'role' => 'player',
                 'is_official' => false,
-                'password' => Hash::make(uniqid()), // Random password for social login users
+                'password' => Hash::make(uniqid()),
             ]);
         }
 
-        // Update last login
         $user->last_login = now();
         $user->save();
 
-        // Create token
         $token = $user->createToken('api')->plainTextToken;
 
         return response()->json([
@@ -182,17 +173,14 @@ class AuthController extends Controller
             'profile_photo' => ['nullable', 'string'],
         ]);
 
-        // Check if user exists with this email
         $user = User::where('email', $validated['email'])->first();
 
         if ($user) {
-            // User exists, update facebook_id if not set
             if (!$user->facebook_id) {
                 $user->facebook_id = $validated['facebook_id'];
                 $user->save();
             }
         } else {
-            // Create new user
             $user = User::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
@@ -200,15 +188,13 @@ class AuthController extends Controller
                 'profile_photo' => $validated['profile_photo'] ?? null,
                 'role' => 'player',
                 'is_official' => false,
-                'password' => Hash::make(uniqid()), // Random password for social login users
+                'password' => Hash::make(uniqid()),
             ]);
         }
 
-        // Update last login
         $user->last_login = now();
         $user->save();
 
-        // Create token
         $token = $user->createToken('api')->plainTextToken;
 
         return response()->json([
@@ -231,17 +217,14 @@ class AuthController extends Controller
             'profile_photo' => ['nullable', 'string'],
         ]);
 
-        // Check if user exists with this email
         $user = User::where('email', $validated['email'])->first();
 
         if ($user) {
-            // User exists, update apple_id if not set
             if (!$user->apple_id) {
                 $user->apple_id = $validated['apple_id'];
                 $user->save();
             }
         } else {
-            // Create new user
             $user = User::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
@@ -249,15 +232,13 @@ class AuthController extends Controller
                 'profile_photo' => $validated['profile_photo'] ?? null,
                 'role' => 'player',
                 'is_official' => false,
-                'password' => Hash::make(uniqid()), // Random password for social login users
+                'password' => Hash::make(uniqid()),
             ]);
         }
 
-        // Update last login
         $user->last_login = now();
         $user->save();
 
-        // Create token
         $token = $user->createToken('api')->plainTextToken;
 
         return response()->json([
@@ -268,7 +249,6 @@ class AuthController extends Controller
     }
 
     /**
-<<<<<<< HEAD
      * Send password reset link to email
      */
     public function forgotPassword(Request $request)
@@ -277,7 +257,6 @@ class AuthController extends Controller
             'email' => ['required', 'email'],
         ]);
 
-        // Check if user exists
         $user = User::where('email', $validated['email'])->first();
 
         if (!$user) {
@@ -286,20 +265,16 @@ class AuthController extends Controller
             ], 200);
         }
 
-        // Delete old tokens for this email
         DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
 
-        // Generate token
         $token = Str::random(64);
 
-        // Store token in database
         DB::table('password_reset_tokens')->insert([
             'email' => $validated['email'],
             'token' => Hash::make($token),
             'created_at' => now(),
         ]);
 
-        // Send email with reset link
         $resetUrl = env('FRONTEND_URL', 'http://localhost:5173') . '/reset-password?token=' . $token . '&email=' . urlencode($validated['email']);
 
         try {
@@ -327,7 +302,6 @@ class AuthController extends Controller
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        // Find token record
         $tokenRecord = DB::table('password_reset_tokens')
             ->where('email', $validated['email'])
             ->first();
@@ -338,7 +312,6 @@ class AuthController extends Controller
             ]);
         }
 
-        // Check if token is valid (not older than 60 minutes)
         if (now()->diffInMinutes($tokenRecord->created_at) > 60) {
             DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
             throw ValidationException::withMessages([
@@ -346,14 +319,12 @@ class AuthController extends Controller
             ]);
         }
 
-        // Verify token
         if (!Hash::check($validated['token'], $tokenRecord->token)) {
             throw ValidationException::withMessages([
                 'email' => ['Invalid reset token.'],
             ]);
         }
 
-        // Find user and update password
         $user = User::where('email', $validated['email'])->first();
 
         if (!$user) {
@@ -365,13 +336,14 @@ class AuthController extends Controller
         $user->password = Hash::make($validated['password']);
         $user->save();
 
-        // Delete the used token
         DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
 
         return response()->json([
             'message' => 'Password has been reset successfully. You can now login with your new password.',
         ], 200);
-=======
+    }
+
+    /**
      * Redirect to Google OAuth provider
      */
     public function redirectToGoogle()
@@ -386,18 +358,15 @@ class AuthController extends Controller
     {
         try {
             $googleUser = Socialite::driver('google')->user();
-            
-            // Check if user exists with this email
+
             $user = User::where('email', $googleUser->getEmail())->first();
 
             if ($user) {
-                // User exists, update google_id if not set
                 if (!$user->google_id) {
                     $user->google_id = $googleUser->getId();
                     $user->save();
                 }
             } else {
-                // Create new user
                 $user = User::create([
                     'name' => $googleUser->getName(),
                     'email' => $googleUser->getEmail(),
@@ -405,15 +374,13 @@ class AuthController extends Controller
                     'profile_photo' => $googleUser->getAvatar(),
                     'role' => 'player',
                     'is_official' => false,
-                    'password' => Hash::make(uniqid()), // Random password for social login users
+                    'password' => Hash::make(uniqid()),
                 ]);
             }
 
-            // Update last login
             $user->last_login = now();
             $user->save();
 
-            // Create token
             $token = $user->createToken('api')->plainTextToken;
 
             return response()->json([
@@ -427,6 +394,5 @@ class AuthController extends Controller
                 'error' => $e->getMessage(),
             ], 400);
         }
->>>>>>> 4dd1727967bced996f32697bec111be3dc124dae
     }
 }
