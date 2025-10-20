@@ -6,8 +6,12 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use App\Http\Resources\UserResource;
+use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller
 {
@@ -260,5 +264,110 @@ class AuthController extends Controller
             'user' => new UserResource($user),
             'message' => 'Apple authentication successful',
         ]);
+    }
+
+    /**
+     * Send password reset link to email
+     */
+    public function forgotPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        // Check if user exists
+        $user = User::where('email', $validated['email'])->first();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'If an account exists with this email, you will receive a password reset link.',
+            ], 200);
+        }
+
+        // Delete old tokens for this email
+        DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+
+        // Generate token
+        $token = Str::random(64);
+
+        // Store token in database
+        DB::table('password_reset_tokens')->insert([
+            'email' => $validated['email'],
+            'token' => Hash::make($token),
+            'created_at' => now(),
+        ]);
+
+        // Send email with reset link
+        $resetUrl = env('FRONTEND_URL', 'http://localhost:5173') . '/reset-password?token=' . $token . '&email=' . urlencode($validated['email']);
+
+        try {
+            Mail::send('emails.password-reset', ['resetUrl' => $resetUrl, 'user' => $user], function ($message) use ($validated) {
+                $message->to($validated['email']);
+                $message->subject('Reset Your Password - UBALL');
+            });
+        } catch (\Exception $e) {
+            \Log::error('Password reset email failed: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'If an account exists with this email, you will receive a password reset link.',
+        ], 200);
+    }
+
+    /**
+     * Reset password using token
+     */
+    public function resetPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        // Find token record
+        $tokenRecord = DB::table('password_reset_tokens')
+            ->where('email', $validated['email'])
+            ->first();
+
+        if (!$tokenRecord) {
+            throw ValidationException::withMessages([
+                'email' => ['Invalid or expired reset token.'],
+            ]);
+        }
+
+        // Check if token is valid (not older than 60 minutes)
+        if (now()->diffInMinutes($tokenRecord->created_at) > 60) {
+            DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+            throw ValidationException::withMessages([
+                'email' => ['Reset token has expired. Please request a new one.'],
+            ]);
+        }
+
+        // Verify token
+        if (!Hash::check($validated['token'], $tokenRecord->token)) {
+            throw ValidationException::withMessages([
+                'email' => ['Invalid reset token.'],
+            ]);
+        }
+
+        // Find user and update password
+        $user = User::where('email', $validated['email'])->first();
+
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'email' => ['User not found.'],
+            ]);
+        }
+
+        $user->password = Hash::make($validated['password']);
+        $user->save();
+
+        // Delete the used token
+        DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+
+        return response()->json([
+            'message' => 'Password has been reset successfully. You can now login with your new password.',
+        ], 200);
     }
 }

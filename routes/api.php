@@ -59,6 +59,10 @@ Route::post('player-login', [AuthController::class, 'playerLogin']);
 Route::post('auth/google', [AuthController::class, 'googleAuth']);
 Route::post('auth/facebook', [AuthController::class, 'facebookAuth']);
 Route::post('auth/apple', [AuthController::class, 'appleAuth']);
+
+// Password Reset
+Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('reset-password', [AuthController::class, 'resetPassword']);
 Route::middleware('auth:sanctum')->post('logout', [AuthController::class, 'logout']);
 
 // Protected example route (current user)
