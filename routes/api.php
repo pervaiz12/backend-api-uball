@@ -57,6 +57,8 @@ Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
 Route::post('player-login', [AuthController::class, 'playerLogin']);
 Route::post('auth/google', [AuthController::class, 'googleAuth']);
+Route::get('auth/google/redirect', [AuthController::class, 'redirectToGoogle']);
+Route::get('auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
 Route::post('auth/facebook', [AuthController::class, 'facebookAuth']);
 Route::post('auth/apple', [AuthController::class, 'appleAuth']);
 
