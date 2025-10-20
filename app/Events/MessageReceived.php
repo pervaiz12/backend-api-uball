@@ -84,7 +84,7 @@ class MessageReceived implements ShouldBroadcastNow
             'attachment_size' => $this->message->attachment_size,
             'created_at' => $this->message->created_at?->toISOString(),
             'timestamp' => now()->toISOString(),
-            'action_url' => "/app/messages?userId={$this->message->sender_id}",
+            'action_url' => "/messages?userId={$this->message->sender_id}",
             'redirect_to' => 'messages',
         ];
     }

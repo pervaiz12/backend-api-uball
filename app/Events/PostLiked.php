@@ -73,7 +73,7 @@ class PostLiked implements ShouldBroadcastNow
                 'thumbnail_url' => $this->clip->thumbnail_url,
             ],
             'timestamp' => now()->toISOString(),
-            'action_url' => "/app/home?focusPost={$this->clip->id}",
+            'action_url' => "/home?focusPost={$this->clip->id}",
             'redirect_to' => 'home_focus',
         ];
     }

@@ -76,7 +76,7 @@ class PostCommented implements ShouldBroadcastNow
             ],
             'comment_content' => $this->commentContent,
             'timestamp' => now()->toISOString(),
-            'action_url' => "/app/home?focusPost={$this->clip->id}",
+            'action_url' => "/home?focusPost={$this->clip->id}",
             'redirect_to' => 'home_focus',
         ];
     }

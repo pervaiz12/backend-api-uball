@@ -41,7 +41,7 @@ class PostLikedNotification extends Notification
             'liker_profile_photo' => $this->likerProfilePhoto,
             'post_content' => $this->postContent,
             'message' => "{$this->likerName} liked your post",
-            'action_url' => "/app/home?focusPost={$this->postId}",
+            'action_url' => "/home?focusPost={$this->postId}",
             'redirect_to' => 'home_focus',
             'clickable' => true,
         ];
@@ -73,7 +73,7 @@ class PostLikedNotification extends Notification
             'liker_name' => $this->likerName,
             'liker_profile_photo' => $this->likerProfilePhoto ?? '',
             'post_content' => $this->postContent ?? '',
-            'action_url' => "/app/home?focusPost={$this->postId}",
+            'action_url' => "/home?focusPost={$this->postId}",
             'redirect_to' => 'home_focus',
         ];
 

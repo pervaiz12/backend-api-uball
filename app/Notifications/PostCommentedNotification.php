@@ -43,7 +43,7 @@ class PostCommentedNotification extends Notification
             'comment_content' => $this->commentContent,
             'post_content' => $this->postContent,
             'message' => "{$this->commenterName} commented on your post",
-            'action_url' => "/app/home?focusPost={$this->postId}",
+            'action_url' => "/home?focusPost={$this->postId}",
             'redirect_to' => 'home_focus',
             'clickable' => true,
         ];
@@ -76,7 +76,7 @@ class PostCommentedNotification extends Notification
             'commenter_profile_photo' => $this->commenterProfilePhoto ?? '',
             'comment_content' => $this->commentContent,
             'post_content' => $this->postContent ?? '',
-            'action_url' => "/app/home?focusPost={$this->postId}",
+            'action_url' => "/home?focusPost={$this->postId}",
             'redirect_to' => 'home_focus',
         ];
 
